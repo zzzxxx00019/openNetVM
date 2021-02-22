@@ -202,6 +202,7 @@ struct port_info {
         uint8_t id[RTE_MAX_ETHPORTS];
         uint8_t init[RTE_MAX_ETHPORTS];
         struct rte_ether_addr mac[RTE_MAX_ETHPORTS];
+        struct rte_ether_addr neighbor_mac[RTE_MAX_ETHPORTS];
         volatile struct rx_stats rx_stats;
         volatile struct tx_stats tx_stats;
 };
