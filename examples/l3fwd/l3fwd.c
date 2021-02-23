@@ -145,18 +145,6 @@ print_stats(__attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
         printf("\n\n");
 }
 
-/*Prints rte_ether_hdr info*/
-static void
-print_eth_hdr(struct rte_ether_hdr *eth_hdr) {
-    printf("MAC address: %02X:%02X:%02X:%02X:%02X:%02X\n\n",
-            eth_hdr->d_addr.addr_bytes[0],
-            eth_hdr->d_addr.addr_bytes[1],
-            eth_hdr->d_addr.addr_bytes[2],
-            eth_hdr->d_addr.addr_bytes[3],
-            eth_hdr->d_addr.addr_bytes[4],
-            eth_hdr->d_addr.addr_bytes[5]);
-}
-
 /*
  * This function checks for valid ipv4 packets. Updates the
  * src and destination ethernet addresses of packets. It then performs a lookup
@@ -208,29 +196,8 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                 ++(ipv4_hdr->hdr_checksum);
 #endif
                 /* dst addr */
-                if(dst_port == 0)
-                {
-                    eth_hdr->d_addr.addr_bytes[0] = 8 ;
-                    eth_hdr->d_addr.addr_bytes[1] = 0 ;
-                    eth_hdr->d_addr.addr_bytes[2] = 39 ;
-                    eth_hdr->d_addr.addr_bytes[3] = 158 ;
-                    eth_hdr->d_addr.addr_bytes[4] = 79 ;
-                    eth_hdr->d_addr.addr_bytes[5] = 121 ;                    
-                }
-                else if(dst_port == 1)
-                {
-                    eth_hdr->d_addr.addr_bytes[0] = 8 ;
-                    eth_hdr->d_addr.addr_bytes[1] = 0 ;
-                    eth_hdr->d_addr.addr_bytes[2] = 39 ;
-                    eth_hdr->d_addr.addr_bytes[3] = 104 ;
-                    eth_hdr->d_addr.addr_bytes[4] = 206 ;
-                    eth_hdr->d_addr.addr_bytes[5] = 124 ;  
-                }
-                printf("send to port %u\n",dst_port);
-                print_eth_hdr(eth_hdr);
-
-                //rte_ether_addr_copy(&ports->neighbor_mac[dst_port], &eth_hdr->d_addr);
-
+                rte_ether_addr_copy(&ports->neighbor_mac[dst_port], &eth_hdr->d_addr);
+                                
                 /* src addr */
                 rte_ether_addr_copy(&stats->ports_eth_addr[dst_port], &eth_hdr->s_addr);
 
@@ -317,6 +284,42 @@ nf_setup(struct onvm_nf_local_ctx *nf_local_ctx) {
                 printf("Hash table exact match enabled. \n");
                 printf("Hash entry number set to: %d\n", stats->hash_entry_number);
         }
+
+        /*
+         * Initialize neighbor's mac address
+         * it should be done during first NF
+         * but we fail to setup in NF 1
+         * neet to fix this bug in future
+         */
+        /*
+        for (int i=0 ; i<RTE_MAX_ETHPORTS ; i++){
+            if(ports->neighbor_mac[i].addr_bytes[0] == 0 && ports->neighbor_mac[i].addr_bytes[1] == 0 &&
+               ports->neighbor_mac[i].addr_bytes[2] == 0 && ports->neighbor_mac[i].addr_bytes[3] == 0 &&
+               ports->neighbor_mac[i].addr_bytes[4] == 0 && ports->neighbor_mac[i].addr_bytes[5] == 0 )
+            {
+                    ports->neighbor_mac[i].addr_bytes[0] = 255 ;
+                    ports->neighbor_mac[i].addr_bytes[1] = 255 ;
+                    ports->neighbor_mac[i].addr_bytes[2] = 255 ;
+                    ports->neighbor_mac[i].addr_bytes[3] = 255 ;
+                    ports->neighbor_mac[i].addr_bytes[4] = 255 ;
+                    ports->neighbor_mac[i].addr_bytes[5] = 255 ;
+            }
+        }
+        */
+
+        ports->neighbor_mac[0].addr_bytes[0] = 8 ;
+        ports->neighbor_mac[0].addr_bytes[1] = 0 ;
+        ports->neighbor_mac[0].addr_bytes[2] = 39 ;
+        ports->neighbor_mac[0].addr_bytes[3] = 158 ;
+        ports->neighbor_mac[0].addr_bytes[4] = 79 ;
+        ports->neighbor_mac[0].addr_bytes[5] = 121 ;
+
+        ports->neighbor_mac[1].addr_bytes[0] = 8 ;
+        ports->neighbor_mac[1].addr_bytes[1] = 0 ;
+        ports->neighbor_mac[1].addr_bytes[2] = 39 ;
+        ports->neighbor_mac[1].addr_bytes[3] = 104 ;
+        ports->neighbor_mac[1].addr_bytes[4] = 206 ;
+        ports->neighbor_mac[1].addr_bytes[5] = 124 ;
 }
 
 int
