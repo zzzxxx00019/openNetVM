@@ -252,7 +252,6 @@ send_arp_reply(int port, struct rte_ether_addr *tha, uint32_t tip, struct onvm_n
 
         // FIX ARP SOURCE IP ERROR
         out_arp_hdr->arp_data.arp_sip = rte_cpu_to_be_32(state_info->source_ips[ports->id[port]]);
-
         out_arp_hdr->arp_data.arp_tip = rte_cpu_to_be_32(tip);
         rte_ether_addr_copy(tha, &out_arp_hdr->arp_data.arp_tha);
 
@@ -272,6 +271,13 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
         int result = -1;
 
         /*
+         * Learn neighbor's mac address for each ports
+         * We need to avoid broadcast storm when using VM
+         * Using static table for VM
+         */
+        //rte_ether_addr_copy(&eth_hdr->s_addr, &ports->neighbor_mac[pkt->port]);
+        
+        /*
          * First check if pkt is of type ARP:
          * Then whether its an ARP REQUEST
          *      if packet target IP matches machine IP send ARP REPLY
@@ -283,7 +289,7 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                 switch (rte_cpu_to_be_16(in_arp_hdr->arp_opcode)) {
                         case RTE_ARP_OP_REQUEST:
                                 if (rte_be_to_cpu_32(in_arp_hdr->arp_data.arp_tip) ==
-                                                state_info->source_ips[ports->id[pkt->port]]) {
+                                        state_info->source_ips[ports->id[pkt->port]]) {
                                         result = send_arp_reply(pkt->port, &eth_hdr->s_addr,
                                                                 in_arp_hdr->arp_data.arp_sip, nf_local_ctx->nf);
                                         if (state_info->print_flag) {
