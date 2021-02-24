@@ -268,6 +268,7 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
         struct rte_ether_hdr *eth_hdr = onvm_pkt_ether_hdr(pkt);
         struct rte_arp_hdr *in_arp_hdr = NULL;
+        struct rte_ipv4_hdr *in_ipv4_hdr = NULL;
         int result = -1;
 
         /*
@@ -310,6 +311,25 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                                                 pkt->port, ports->id[pkt->port]);
                                 }
                 }
+        }
+        else if (rte_cpu_to_be_16(eth_hdr->ether_type) == RTE_ETHER_TYPE_IPV4) {
+            in_ipv4_hdr = rte_pktmbuf_mtod_offset(pkt, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr));
+            if(in_ipv4_hdr->next_proto_id == 1 && rte_be_to_cpu_32(in_ipv4_hdr->dst_addr) == state_info->source_ips[ports->id[pkt->port]]) {
+			    //swap MAC addresses
+                onvm_pkt_swap_ether_hdr(eth_hdr);
+			    //swap IP addresses
+			    onvm_pkt_swap_ip_hdr(in_ipv4_hdr);
+			    //set to ICMP reply
+			    struct rte_icmp_hdr *icmp_hdr = rte_pktmbuf_mtod_offset(pkt, struct rte_icmp_hdr *, sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr));
+			    icmp_hdr->icmp_type = RTE_IP_ICMP_ECHO_REPLY;
+                icmp_hdr->icmp_code = 0;
+                //chechsum has error
+			    onvm_pkt_set_checksums(pkt);
+                //send
+			    meta->destination = pkt->port;
+			    meta->action = ONVM_NF_ACTION_OUT;
+			    result = onvm_nflib_return_pkt(nf_local_ctx->nf, pkt);            
+            }
         }
 
         meta->destination = state_info->nf_destination;
