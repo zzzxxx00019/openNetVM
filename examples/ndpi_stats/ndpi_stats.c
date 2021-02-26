@@ -79,8 +79,17 @@ struct ndpi_workflow *workflow;
 uint32_t current_ndpi_memory = 0, max_ndpi_memory = 0;
 static u_int8_t quiet_mode = 0;
 static u_int16_t decode_tunnels = 0;
+FILE *csv_fp = NULL;
 static FILE *results_file = NULL;
 static struct timeval begin, end;
+
+/* missing parameters */
+int nDPI_LogLevel = 0;
+char *_debug_protocols = NULL;
+u_int8_t enable_protocol_guess = 1, enable_payload_analyzer = 0;
+u_int8_t enable_joy_stats = 0;
+u_int8_t human_readeable_string_len = 5;
+u_int8_t max_num_udp_dissected_pkts = 16 /* 8 is enough for most protocols, Signal requires more */, max_num_tcp_dissected_pkts = 80 /* due to telnet */;
 
 /* nDPI methods */
 void
@@ -230,12 +239,13 @@ static void
 node_proto_guess_walker(const void *node, ndpi_VISIT which, int depth, void *user_data) {
         struct ndpi_flow_info *flow = *(struct ndpi_flow_info **)node;
         u_int16_t thread_id = *((u_int16_t *)user_data);
+        u_int8_t proto_guessed;
 
         if ((which == ndpi_preorder) || (which == ndpi_leaf)) { /* Avoid walking the same node multiple times */
                 if ((!flow->detection_completed) && flow->ndpi_flow)
-                        flow->detected_protocol = ndpi_detection_giveup(workflow->ndpi_struct, flow->ndpi_flow);
+                        flow->detected_protocol = ndpi_detection_giveup(workflow->ndpi_struct, flow->ndpi_flow, enable_protocol_guess, &proto_guessed);
 
-                process_ndpi_collected_info(workflow, flow);
+                process_ndpi_collected_info(workflow, flow, csv_fp);
                 workflow->stats.protocol_counter[flow->detected_protocol.app_protocol] +=
                     flow->src2dst_packets + flow->dst2src_packets;
                 workflow->stats.protocol_counter_bytes[flow->detected_protocol.app_protocol] +=
@@ -254,8 +264,9 @@ print_results(void) {
         u_int32_t avg_pkt_size = 0;
         u_int64_t tot_usec;
 
-        if (workflow->stats.total_wire_bytes == 0)
+        if (workflow->stats.total_wire_bytes == 0) {
                 return;
+        }
 
         for (i = 0; i < NUM_ROOTS; i++) {
                 ndpi_twalk(workflow->ndpi_flows_root[i], node_proto_guess_walker, 0);
@@ -327,6 +338,7 @@ print_results(void) {
                             workflow->stats.protocol_flows[i]);
                 }
         }
+
 }
 
 static int
@@ -344,7 +356,7 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
         pkt_hdr.len = rte_pktmbuf_data_len(pkt);
         packet = rte_pktmbuf_mtod(pkt, u_char *);
 
-        prot = ndpi_workflow_process_packet(workflow, &pkt_hdr, packet);
+        prot = ndpi_workflow_process_packet(workflow, &pkt_hdr, packet, csv_fp);
         workflow->stats.protocol_counter[prot.app_protocol]++;
         workflow->stats.protocol_counter_bytes[prot.app_protocol] += pkt_hdr.len;
 

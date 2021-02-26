@@ -60,7 +60,7 @@ ONVM= $(SRCDIR)/../../onvm
 CFLAGS += -O3 $(USER_FLAGS)
 
 CFLAGS += -I$(NDPI_HOME)/src/include
-LDFLAGS += $(NDPI_HOME)/lib/libndpi.a
+LDFLAGS += $(NDPI_HOME)/src/lib/libndpi.a
 
 CFLAGS += -I$(ONVM)/onvm_nflib
 CFLAGS += -I$(ONVM)/lib
