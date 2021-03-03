@@ -28,7 +28,6 @@ App Specific Arguments
   - `-c`: Set spawned children to use shared cpu core allocation
   - `-a`: Use advanced rings interface instead of default `packet_handler`
 
-==
 This program use NF scaling with arp_response, by default advanced rings flag, and children num = 2
 
 usage:
