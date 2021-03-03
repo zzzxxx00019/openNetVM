@@ -108,6 +108,7 @@ struct state_info {
 };
 struct state_info *state_info;
 static int send_arp_reply(int port, struct rte_ether_addr *tha, uint32_t tip, struct onvm_nf *nf);
+//static int send_icmp_reply(int port, struct rte_ether_addr *tha, uint32_t tip, struct onvm_nf *nf);
 
 static void run_advanced_rings(int argc, char *argv[]);
 
@@ -291,7 +292,57 @@ send_arp_reply(int port, struct rte_ether_addr *tha, uint32_t tip, struct onvm_n
 
         return onvm_nflib_return_pkt(nf, out_pkt);
 }
+/*
+static int
+send_icmp_reply(int port, struct rte_ether_addr *tha, uint32_t tip, struct onvm_nf *nf) {
+        struct rte_mbuf *out_pkt = NULL;
+        struct onvm_pkt_meta *pmeta = NULL;
+        struct rte_ether_hdr *eth_hdr = NULL;
+        struct rte_ipv4_hdr *in_ipv4_hdr = NULL;
+        struct rte_icmp_hdr *icmp_hdr = NULL;
 
+        size_t pkt_size = 0;
+
+        if (tha == NULL) {
+                return -1;
+        }
+
+        out_pkt = rte_pktmbuf_alloc(state_info->pktmbuf_pool);
+        if (out_pkt == NULL) {
+                rte_free(out_pkt);
+                return -1;
+        }
+
+        pkt_size = sizeof(struct rte_ether_hdr) + sizeof(struct rte_arp_hdr);
+        out_pkt->data_len = pkt_size;
+        out_pkt->pkt_len = pkt_size;
+
+        // SET ETHER HEADER INFO
+        eth_hdr = onvm_pkt_ether_hdr(out_pkt);
+        rte_ether_addr_copy(&ports->mac[port], &eth_hdr->s_addr);
+        eth_hdr->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_ARP);
+        rte_ether_addr_copy(tha, &eth_hdr->d_addr);
+
+        // SET ICMP HDR INFO
+        icmp_hdr = rte_pktmbuf_mtod_offset(out_pkt, struct rte_icmp_hdr *, sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr));
+        icmp_hdr->icmp_type = RTE_IP_ICMP_ECHO_REPLY;
+        icmp_hdr->icmp_code = 0;
+
+        // SET ICMP IPv4 IP INFO
+        in_ipv4_hdr = rte_pktmbuf_mtod_offset(out_pkt, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr));
+
+        // FIX ARP SOURCE IP ERROR
+        in_ipv4_hdr->dst_addr = rte_cpu_to_be_32(tip);
+        in_ipv4_hdr->src_addr = rte_cpu_to_be_32(state_info->source_ips[ports->id[port]]);
+
+        // SEND PACKET OUT/SET METAINFO
+        pmeta = onvm_get_pkt_meta(out_pkt);
+        pmeta->destination = port;
+        pmeta->action = ONVM_NF_ACTION_OUT;
+
+        return onvm_nflib_return_pkt(nf, out_pkt);
+}
+*/
 /*
  * Generates fake packets and enqueues them into the tx ring
  */
@@ -346,7 +397,6 @@ packet_handler_fwd(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                    __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
         struct rte_ether_hdr *eth_hdr = onvm_pkt_ether_hdr(pkt);
         struct rte_arp_hdr *in_arp_hdr = NULL;
-        //struct rte_ipv4_hdr *in_ipv4_hdr = NULL;
         int result = -1;
 
         if (rte_cpu_to_be_16(eth_hdr->ether_type) == RTE_ETHER_TYPE_ARP) {
@@ -371,9 +421,20 @@ packet_handler_fwd(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                                        rte_cpu_to_be_16(in_arp_hdr->arp_opcode),
                                        pkt->port, ports->id[pkt->port]);
                 }
-        }        
-        
-        (void)pkt;
+        }
+        /* 
+        else if (rte_cpu_to_be_16(eth_hdr->ether_type) == RTE_ETHER_TYPE_IPV4) {
+                istruct rte_ipv4_hdr *in_ipv4_hdr = rte_pktmbuf_mtod_offset(pkt, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr));
+                if(in_ipv4_hdr->next_proto_id == 1 && rte_be_to_cpu_32(in_ipv4_hdr->dst_addr) == state_info->source_ips[ports->id[pkt->port]]) {
+                        result = send_icmp_reply(pkt->port, &eth_hdr->s_addr,
+                                                in_ipv4_hdr->src_addr, nf_local_ctx->nf);
+                        meta->action = ONVM_NF_ACTION_DROP;
+                        printf("ICMP reply done, result = %d, pkt from port %d\n",result, pkt->port);
+                        return 0;
+                }	   
+        }       
+        */
+
         meta->destination = destination;
         meta->action = ONVM_NF_ACTION_TONF;
         
