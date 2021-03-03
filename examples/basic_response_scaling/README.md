@@ -27,3 +27,13 @@ App Specific Arguments
   - `-n NUM_CHILDREN`: Sets the number of children for the NF to spawn
   - `-c`: Set spawned children to use shared cpu core allocation
   - `-a`: Use advanced rings interface instead of default `packet_handler`
+
+==
+This program use NF scaling with arp_response, by default advanced rings flag, and children num = 2
+
+usage:
+-s : IP for each ports, for example -s 192.168.10.10,192.168.20.10 for two interfaces
+-d : Destinaton Service ID
+
+TODO:
+ICMP function has fatal error, wrong ICMP reply packet and need to be fixed.
