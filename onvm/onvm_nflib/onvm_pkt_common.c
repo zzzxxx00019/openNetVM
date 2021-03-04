@@ -115,9 +115,13 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                                 nf->stats.act_out++;
                                 out_buf = tx_mgr->to_tx_buf;
                                 out_buf->buffer[out_buf->count++] = pkts[i];
+                                onvm_pkt_enqueue_tx_thread(out_buf, nf);
+                                /* Cancel wait tx buffer */
+                                /*
                                 if (out_buf->count == PACKET_READ_SIZE) {
                                         onvm_pkt_enqueue_tx_thread(out_buf, nf);
                                 }
+                                */
                         } else {
                                 onvm_pkt_enqueue_port(tx_mgr, meta->destination, pkts[i]);
                         }
