@@ -53,6 +53,7 @@
 #include <rte_common.h>
 #include <rte_ether.h>
 #include <rte_ip.h>
+#include <rte_icmp.h>
 #include <rte_malloc.h>
 #include <rte_mbuf.h>
 #include <rte_mempool.h>
@@ -152,6 +153,7 @@ parse_app_args(int argc, char *argv[], const char *progname) {
                                 break;
                         case 's':
                                 num_ips = get_ip_count(optarg, delim);
+                                printf("ONVM got %d IPs\n",num_ips);
                                 if (num_ips > ports->num_ports) {
                                         RTE_LOG(INFO, APP, "Too many IPs were entered!\n");
                                         return -1;
@@ -328,7 +330,8 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                 //send
 			    meta->destination = pkt->port;
 			    meta->action = ONVM_NF_ACTION_OUT;
-			    result = onvm_nflib_return_pkt(nf_local_ctx->nf, pkt);            
+ 
+                return 0;
             }
         }
 
