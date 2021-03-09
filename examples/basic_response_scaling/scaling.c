@@ -74,7 +74,7 @@
 #define LOCAL_EXPERIMENTAL_ETHER 0x88B5
 #define DEFAULT_PKT_NUM 128
 #define MAX_PKT_NUM NF_QUEUE_RINGSIZE
-#define DEFAULT_NUM_CHILDREN 1
+#define DEFAULT_NUM_CHILDREN 3
 
 static uint16_t destination;
 static uint16_t num_children = DEFAULT_NUM_CHILDREN;
@@ -293,57 +293,6 @@ send_arp_reply(int port, struct rte_ether_addr *tha, uint32_t tip, struct onvm_n
         return onvm_nflib_return_pkt(nf, out_pkt);
 }
 /*
-static int
-send_icmp_reply(int port, struct rte_ether_addr *tha, uint32_t tip, struct onvm_nf *nf) {
-        struct rte_mbuf *out_pkt = NULL;
-        struct onvm_pkt_meta *pmeta = NULL;
-        struct rte_ether_hdr *eth_hdr = NULL;
-        struct rte_ipv4_hdr *in_ipv4_hdr = NULL;
-        struct rte_icmp_hdr *icmp_hdr = NULL;
-
-        size_t pkt_size = 0;
-
-        if (tha == NULL) {
-                return -1;
-        }
-
-        out_pkt = rte_pktmbuf_alloc(state_info->pktmbuf_pool);
-        if (out_pkt == NULL) {
-                rte_free(out_pkt);
-                return -1;
-        }
-
-        pkt_size = sizeof(struct rte_ether_hdr) + sizeof(struct rte_arp_hdr);
-        out_pkt->data_len = pkt_size;
-        out_pkt->pkt_len = pkt_size;
-
-        // SET ETHER HEADER INFO
-        eth_hdr = onvm_pkt_ether_hdr(out_pkt);
-        rte_ether_addr_copy(&ports->mac[port], &eth_hdr->s_addr);
-        eth_hdr->ether_type = rte_cpu_to_be_16(RTE_ETHER_TYPE_ARP);
-        rte_ether_addr_copy(tha, &eth_hdr->d_addr);
-
-        // SET ICMP HDR INFO
-        icmp_hdr = rte_pktmbuf_mtod_offset(out_pkt, struct rte_icmp_hdr *, sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr));
-        icmp_hdr->icmp_type = RTE_IP_ICMP_ECHO_REPLY;
-        icmp_hdr->icmp_code = 0;
-
-        // SET ICMP IPv4 IP INFO
-        in_ipv4_hdr = rte_pktmbuf_mtod_offset(out_pkt, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr));
-
-        // FIX ARP SOURCE IP ERROR
-        in_ipv4_hdr->dst_addr = rte_cpu_to_be_32(tip);
-        in_ipv4_hdr->src_addr = rte_cpu_to_be_32(state_info->source_ips[ports->id[port]]);
-
-        // SEND PACKET OUT/SET METAINFO
-        pmeta = onvm_get_pkt_meta(out_pkt);
-        pmeta->destination = port;
-        pmeta->action = ONVM_NF_ACTION_OUT;
-
-        return onvm_nflib_return_pkt(nf, out_pkt);
-}
-*/
-/*
  * Generates fake packets and enqueues them into the tx ring
  */
 void
@@ -397,7 +346,10 @@ packet_handler_fwd(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                    __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
         struct rte_ether_hdr *eth_hdr = onvm_pkt_ether_hdr(pkt);
         struct rte_arp_hdr *in_arp_hdr = NULL;
+        struct rte_ipv4_hdr *in_ipv4_hdr = NULL;
         int result = -1;
+
+        //rte_ether_addr_copy(&eth_hdr->s_addr, &ports->neighbor_mac[pkt->port]);
 
         if (rte_cpu_to_be_16(eth_hdr->ether_type) == RTE_ETHER_TYPE_ARP) {
                 in_arp_hdr = rte_pktmbuf_mtod_offset(pkt, struct rte_arp_hdr *, sizeof(struct rte_ether_hdr));
@@ -422,21 +374,30 @@ packet_handler_fwd(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                                        pkt->port, ports->id[pkt->port]);
                 }
         }
-        /* 
         else if (rte_cpu_to_be_16(eth_hdr->ether_type) == RTE_ETHER_TYPE_IPV4) {
-                istruct rte_ipv4_hdr *in_ipv4_hdr = rte_pktmbuf_mtod_offset(pkt, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr));
+                in_ipv4_hdr = rte_pktmbuf_mtod_offset(pkt, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr));
                 if(in_ipv4_hdr->next_proto_id == 1 && rte_be_to_cpu_32(in_ipv4_hdr->dst_addr) == state_info->source_ips[ports->id[pkt->port]]) {
-                        result = send_icmp_reply(pkt->port, &eth_hdr->s_addr,
-                                                in_ipv4_hdr->src_addr, nf_local_ctx->nf);
-                        meta->action = ONVM_NF_ACTION_DROP;
-                        printf("ICMP reply done, result = %d, pkt from port %d\n",result, pkt->port);
-                        return 0;
-                }	   
-        }       
-        */
+                //swap MAC addresses
+                onvm_pkt_swap_ether_hdr(eth_hdr);
+                //swap IP addresses
+                onvm_pkt_swap_ip_hdr(in_ipv4_hdr);
+                //set to ICMP reply
+                struct rte_icmp_hdr *icmp_hdr = rte_pktmbuf_mtod_offset(pkt, struct rte_icmp_hdr *, sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr));
+                icmp_hdr->icmp_type = RTE_IP_ICMP_ECHO_REPLY;
+                icmp_hdr->icmp_code = 0;
+                //chechsum has error
+                onvm_pkt_set_checksums(pkt);
+                //send
+                meta->destination = pkt->port;
+                meta->action = ONVM_NF_ACTION_OUT;
+                     
+                return 0;
+                }
+        }               
 
         meta->destination = destination;
         meta->action = ONVM_NF_ACTION_TONF;
+
         
         return 0;
 }
@@ -593,7 +554,21 @@ run_advanced_rings(int argc, char *argv[]) {
         nf = nf_local_ctx->nf;
         onvm_config = onvm_nflib_get_onvm_config();
         ONVM_NF_SHARE_CORES = onvm_config->flags.ONVM_NF_SHARE_CORES;
+        
+        ports->neighbor_mac[0].addr_bytes[0] = (uint8_t) strtol("a0", NULL, 16);
+        ports->neighbor_mac[0].addr_bytes[1] = (uint8_t) strtol("36", NULL, 16);
+        ports->neighbor_mac[0].addr_bytes[2] = (uint8_t) strtol("9f", NULL, 16);
+        ports->neighbor_mac[0].addr_bytes[3] = (uint8_t) strtol("21", NULL, 16);
+        ports->neighbor_mac[0].addr_bytes[4] = (uint8_t) strtol("64", NULL, 16);
+        ports->neighbor_mac[0].addr_bytes[5] = (uint8_t) strtol("b8", NULL, 16);
 
+        ports->neighbor_mac[1].addr_bytes[0] = (uint8_t) strtol("f4", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[1] = (uint8_t) strtol("28", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[2] = (uint8_t) strtol("53", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[3] = (uint8_t) strtol("1c", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[4] = (uint8_t) strtol("50", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[5] = (uint8_t) strtol("0b", NULL, 16);
+        
         for (i = 0; i < num_children; i++) {
                 struct onvm_nf_init_cfg *child_cfg;
                 child_cfg = onvm_nflib_init_nf_init_cfg(nf->tag);
