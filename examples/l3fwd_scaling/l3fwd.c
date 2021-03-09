@@ -49,6 +49,7 @@
 #include <string.h>
 #include <sys/queue.h>
 #include <unistd.h>
+#include <time.h>
 
 #include <rte_common.h>
 #include <rte_cycles.h>
@@ -227,7 +228,10 @@ nf_setup(__attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
 static int
 packet_handler_fwd(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                    __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
-        
+        clock_t start, end;
+        double cpu_time_used;
+        start = clock();
+
         struct onvm_nf *nf = nf_local_ctx->nf;
         struct rte_ether_hdr *eth_hdr;
         struct ipv4_hdr *ipv4_hdr;
@@ -275,6 +279,11 @@ packet_handler_fwd(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                 meta->action = ONVM_NF_ACTION_DROP;
                 stats->packets_dropped++;
         }
+
+        end = clock();
+        cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+        //printf("Time = %f\n", cpu_time_used);
+
         return 0;
 }
 
@@ -451,20 +460,6 @@ run_advanced_rings(int argc, char *argv[]) {
                 onvm_nflib_stop(nf_local_ctx);
                 rte_exit(EXIT_FAILURE, "No Ethernet ports. Ensure ports binded to dpdk. - bye\n");
         }
-
-        ports->neighbor_mac[0].addr_bytes[0] = 8 ;
-        ports->neighbor_mac[0].addr_bytes[1] = 0 ;
-        ports->neighbor_mac[0].addr_bytes[2] = 39 ;
-        ports->neighbor_mac[0].addr_bytes[3] = 158 ;
-        ports->neighbor_mac[0].addr_bytes[4] = 79 ;
-        ports->neighbor_mac[0].addr_bytes[5] = 121 ;
-
-        ports->neighbor_mac[1].addr_bytes[0] = 8 ;
-        ports->neighbor_mac[1].addr_bytes[1] = 0 ;
-        ports->neighbor_mac[1].addr_bytes[2] = 39 ;
-        ports->neighbor_mac[1].addr_bytes[3] = 104 ;
-        ports->neighbor_mac[1].addr_bytes[4] = 206 ;
-        ports->neighbor_mac[1].addr_bytes[5] = 124 ;
 
         onvm_config = onvm_nflib_get_onvm_config();
         ONVM_NF_SHARE_CORES = onvm_config->flags.ONVM_NF_SHARE_CORES;
