@@ -74,13 +74,16 @@
 
 #define ONVM_NF_SHARE_CORES_DEFAULT 0  // default value for shared core logic, if true NFs sleep while waiting for packets
 
-#define ONVM_NF_ACTION_DROP 0  // drop packet
-#define ONVM_NF_ACTION_NEXT 1  // to whatever the next action is configured by the SDN controller in the flow table
-#define ONVM_NF_ACTION_TONF 2  // send to the NF specified in the argument field (assume it is on the same host)
-#define ONVM_NF_ACTION_OUT  3  // send the packet out the NIC port set in the argument field
-
 #define PKT_WAKEUP_THRESHOLD 1 // for shared core mode, how many packets are required to wake up the NF
 #define MSG_WAKEUP_THRESHOLD 1 // for shared core mode, how many messages on an NF's ring are required to wake up the NF
+
+/* Default action */
+#define ONVM_NF_ACTION_NEXT 0
+#define ONVM_NF_ACTION_PARA 1
+/* Compara to NFs priorty */
+#define ONVM_NF_ACTION_TONF 2  
+#define ONVM_NF_ACTION_OUT  3
+#define ONVM_NF_ACTION_DROP 4 
 
 /* Used in setting bit flags for core options */
 #define MANUAL_CORE_ASSIGNMENT_BIT 0
@@ -109,10 +112,12 @@
 
 struct onvm_pkt_meta {
         uint8_t action;       /* Action to be performed */
-        uint16_t destination; /* where to go next */
-        uint16_t src;         /* who processed the packet last */
+        uint8_t destination; /* where to go next */
+        uint8_t src;         /* who processed the packet last */
         uint8_t chain_index;  /*index of the current step in the service chain*/
         uint8_t flags;        /* bits for custom NF data. Use with caution to prevent collisions from different NFs. */
+	uint8_t numNF;        /* Number of parallel NFs */
+	uint8_t dispatcher;
 };
 
 static inline struct onvm_pkt_meta *

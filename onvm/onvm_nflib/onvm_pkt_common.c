@@ -47,7 +47,6 @@
 ******************************************************************************/
 
 #include "onvm_pkt_common.h"
-
 /**********************Internal Functions Prototypes**************************/
 
 /*
@@ -87,7 +86,7 @@ onvm_pkt_drop(struct rte_mbuf *pkt);
 
 void
 onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uint16_t tx_count, struct onvm_nf *nf) {
-        uint16_t i;
+        uint16_t i, j;
         struct onvm_pkt_meta *meta;
         struct packet_buf *out_buf;
 
@@ -97,6 +96,15 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
         for (i = 0; i < tx_count; i++) {
                 meta = (struct onvm_pkt_meta *)&(((struct rte_mbuf *)pkts[i])->udata64);
                 meta->src = nf->instance_id;
+		
+		if (meta->numNF) {
+			if (meta->dispatcher) {
+				meta->dispatcher = 0 ;
+			} else {
+				continue ;
+			}
+		}
+
                 if (meta->action == ONVM_NF_ACTION_DROP) {
                         // if the packet is drop, then <return value> is 0
                         // and !<return value> is 1.
@@ -116,16 +124,17 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                                 out_buf = tx_mgr->to_tx_buf;
                                 out_buf->buffer[out_buf->count++] = pkts[i];
                                 onvm_pkt_enqueue_tx_thread(out_buf, nf);
-                                /* Cancel wait tx buffer */
-                                /*
-                                if (out_buf->count == PACKET_READ_SIZE) {
-                                        onvm_pkt_enqueue_tx_thread(out_buf, nf);
-                                }
-                                */
                         } else {
                                 onvm_pkt_enqueue_port(tx_mgr, meta->destination, pkts[i]);
-                        }
-                } else {
+			}
+                } else if (meta->action == ONVM_NF_ACTION_PARA) {
+			uint8_t dst = meta->destination;
+			for(j = 0 ; j < meta->numNF ; j++) {
+				nf->stats.act_tonf++;
+				onvm_pkt_enqueue_nf(tx_mgr, (dst & 0xf), pkts[i], nf);
+				dst >>= 4;
+			}
+		} else {
                         printf("ERROR invalid action : this shouldn't happen.\n");
                         onvm_pkt_drop(pkts[i]);
                         return;
@@ -318,7 +327,9 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
 
 static int
 onvm_pkt_drop(struct rte_mbuf *pkt) {
-        rte_pktmbuf_free(pkt);
+        if (!pkt)
+		return 1;
+	rte_pktmbuf_free(pkt);
         if (pkt != NULL) {
                 return 1;
         }
