@@ -217,11 +217,7 @@ struct onvm_configuration {
                 uint8_t ONVM_NF_SHARE_CORES;
         } flags;
 };
-/*
-struct onvm_mutex {
-	pthread_mutex_t pkt_mutex;
-};
-*/
+
 struct core_status {
         uint8_t enabled;
         uint8_t is_dedicated_core;
@@ -283,9 +279,6 @@ struct onvm_nf {
         char *tag;
         /* Pointer to NF defined state data */
         void *data;
-
-	/* Pointer to shared mutex */
-	sem_t *mutex;
 
         struct {
                 uint16_t core;

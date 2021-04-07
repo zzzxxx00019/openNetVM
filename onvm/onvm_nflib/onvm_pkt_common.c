@@ -89,7 +89,6 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
         uint16_t i, j;
         struct onvm_pkt_meta *meta;
         struct packet_buf *out_buf;
-	//uint8_t continue_flag = 0;
 	sem_t *mutex = sem_open("pkt_mutex", 0);
 
         if (tx_mgr == NULL || pkts == NULL || nf == NULL)
@@ -98,7 +97,6 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
         for (i = 0; i < tx_count; i++) {
                 meta = (struct onvm_pkt_meta *)&(((struct rte_mbuf *)pkts[i])->udata64);
                 meta->src = nf->instance_id;
-		//continue_flag = 0 ;
 
 		if(meta->mutex_id) {
 			sem_wait(mutex);
@@ -106,16 +104,12 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
 				if(meta->dispatcher) {
 					meta->dispatcher = 0;
 				} else if (--meta->numNF) {
-					//continue_flag = 1 ;
 					sem_post(mutex);
 					continue;
 				}
 			}
 			sem_post(mutex);
 		}
-		//if (continue_flag) {
-		//	continue;
-		//}
                 
 		if (meta->action == ONVM_NF_ACTION_DROP) {
                         // if the packet is drop, then <return value> is 0
