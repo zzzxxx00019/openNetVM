@@ -272,13 +272,6 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
         struct rte_arp_hdr *in_arp_hdr = NULL;
         struct rte_ipv4_hdr *in_ipv4_hdr = NULL;
         int result = -1;
-
-        /*
-         * Learn neighbor's mac address for each ports
-         * We need to avoid broadcast storm when using VM
-         * Using static table for VM
-         */
-        //rte_ether_addr_copy(&eth_hdr->s_addr, &ports->neighbor_mac[pkt->port]);
         
         /*
          * First check if pkt is of type ARP:
@@ -318,16 +311,16 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
             in_ipv4_hdr = rte_pktmbuf_mtod_offset(pkt, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr));
             if(in_ipv4_hdr->next_proto_id == 1 && rte_be_to_cpu_32(in_ipv4_hdr->dst_addr) == state_info->source_ips[ports->id[pkt->port]]) {
 			    //swap MAC addresses
-                onvm_pkt_swap_ether_hdr(eth_hdr);
+                	    onvm_pkt_swap_ether_hdr(eth_hdr);
 			    //swap IP addresses
 			    onvm_pkt_swap_ip_hdr(in_ipv4_hdr);
 			    //set to ICMP reply
 			    struct rte_icmp_hdr *icmp_hdr = rte_pktmbuf_mtod_offset(pkt, struct rte_icmp_hdr *, sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr));
 			    icmp_hdr->icmp_type = RTE_IP_ICMP_ECHO_REPLY;
-                icmp_hdr->icmp_code = 0;
-                //chechsum has error
+                	    icmp_hdr->icmp_code = 0;
+                	    //chechsum has error
 			    onvm_pkt_set_checksums(pkt);
-                //send
+                	    //send
 			    meta->destination = pkt->port;
 			    meta->action = ONVM_NF_ACTION_OUT;
  
@@ -365,6 +358,20 @@ main(int argc, char *argv[]) {
 
         argc -= arg_offset;
         argv += arg_offset;
+
+	ports->neighbor_mac[0].addr_bytes[0] = (uint8_t) strtol("a0", NULL, 16);
+	ports->neighbor_mac[0].addr_bytes[1] = (uint8_t) strtol("36", NULL, 16);
+	ports->neighbor_mac[0].addr_bytes[2] = (uint8_t) strtol("9f", NULL, 16);
+	ports->neighbor_mac[0].addr_bytes[3] = (uint8_t) strtol("21", NULL, 16);
+	ports->neighbor_mac[0].addr_bytes[4] = (uint8_t) strtol("64", NULL, 16);
+	ports->neighbor_mac[0].addr_bytes[5] = (uint8_t) strtol("b8", NULL, 16);
+
+	ports->neighbor_mac[1].addr_bytes[0] = (uint8_t) strtol("a0", NULL, 16);
+	ports->neighbor_mac[1].addr_bytes[1] = (uint8_t) strtol("36", NULL, 16);
+	ports->neighbor_mac[1].addr_bytes[2] = (uint8_t) strtol("9f", NULL, 16);
+	ports->neighbor_mac[1].addr_bytes[3] = (uint8_t) strtol("21", NULL, 16);
+	ports->neighbor_mac[1].addr_bytes[4] = (uint8_t) strtol("5a", NULL, 16);
+	ports->neighbor_mac[1].addr_bytes[5] = (uint8_t) strtol("ea", NULL, 16);
 
         state_info = rte_calloc("state", 1, sizeof(struct state_info), 0);
         if (state_info == NULL) {
