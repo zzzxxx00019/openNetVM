@@ -89,6 +89,8 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
         uint16_t i, j;
         struct onvm_pkt_meta *meta;
         struct packet_buf *out_buf;
+	//uint8_t continue_flag = 0;
+	sem_t *mutex = sem_open("pkt_mutex", 0);
 
         if (tx_mgr == NULL || pkts == NULL || nf == NULL)
                 return;
@@ -96,16 +98,26 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
         for (i = 0; i < tx_count; i++) {
                 meta = (struct onvm_pkt_meta *)&(((struct rte_mbuf *)pkts[i])->udata64);
                 meta->src = nf->instance_id;
-		
-		if (meta->numNF) {
-			if (meta->dispatcher) {
-				meta->dispatcher = 0 ;
-			} else {
-				continue ;
-			}
-		}
+		//continue_flag = 0 ;
 
-                if (meta->action == ONVM_NF_ACTION_DROP) {
+		if(meta->mutex_id) {
+			sem_wait(mutex);
+			if (meta->numNF) {
+				if(meta->dispatcher) {
+					meta->dispatcher = 0;
+				} else if (--meta->numNF) {
+					//continue_flag = 1 ;
+					sem_post(mutex);
+					continue;
+				}
+			}
+			sem_post(mutex);
+		}
+		//if (continue_flag) {
+		//	continue;
+		//}
+                
+		if (meta->action == ONVM_NF_ACTION_DROP) {
                         // if the packet is drop, then <return value> is 0
                         // and !<return value> is 1.
                         nf->stats.act_drop++;
@@ -129,10 +141,11 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
 			}
                 } else if (meta->action == ONVM_NF_ACTION_PARA) {
 			uint8_t dst = meta->destination;
-			for(j = 0 ; j < meta->numNF ; j++) {
-				nf->stats.act_tonf++;
-				onvm_pkt_enqueue_nf(tx_mgr, (dst & 0xf), pkts[i], nf);
-				dst >>= 4;
+			for(j = 0 ; j < 16 ; j++) {
+				if ((dst >> j) & 1){
+					nf->stats.act_tonf++;
+					onvm_pkt_enqueue_nf(tx_mgr, j, pkts[i], nf);
+				}
 			}
 		} else {
                         printf("ERROR invalid action : this shouldn't happen.\n");

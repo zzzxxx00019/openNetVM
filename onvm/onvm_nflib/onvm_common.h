@@ -115,9 +115,9 @@ struct onvm_pkt_meta {
         uint8_t destination; /* where to go next */
         uint8_t src;         /* who processed the packet last */
         uint8_t chain_index;  /*index of the current step in the service chain*/
-        uint8_t flags;        /* bits for custom NF data. Use with caution to prevent collisions from different NFs. */
 	uint8_t numNF;        /* Number of parallel NFs */
-	uint8_t dispatcher;
+	uint8_t mutex_id;
+	bool dispatcher;
 };
 
 static inline struct onvm_pkt_meta *
@@ -217,7 +217,11 @@ struct onvm_configuration {
                 uint8_t ONVM_NF_SHARE_CORES;
         } flags;
 };
-
+/*
+struct onvm_mutex {
+	pthread_mutex_t pkt_mutex;
+};
+*/
 struct core_status {
         uint8_t enabled;
         uint8_t is_dedicated_core;
@@ -279,6 +283,9 @@ struct onvm_nf {
         char *tag;
         /* Pointer to NF defined state data */
         void *data;
+
+	/* Pointer to shared mutex */
+	sem_t *mutex;
 
         struct {
                 uint16_t core;
