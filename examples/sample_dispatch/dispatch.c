@@ -31,7 +31,7 @@ static uint64_t cur_cycles;
 
 /* shared data structure containing host port info */
 extern struct port_info *ports;
-
+extern struct onvm_mutex *parallel_mutex ;
 /*
  * Print a usage message
  */
@@ -74,19 +74,6 @@ parse_app_args(int argc, char *argv[], const char *progname) {
         return optind;
 }
 
-
-static int
-callback_handler(__attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
-        cur_cycles = rte_get_tsc_cycles();
-
-        if (((cur_cycles - last_cycle) / rte_get_timer_hz()) > 5) {
-                printf("Total packets received: %" PRIu32 "\n", total_packets);
-                last_cycle = cur_cycles;
-        }
-
-        return 0;
-}
-
 static int
 packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
@@ -98,13 +85,15 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
 	meta->numNF = 0;
 	meta->dispatcher = 1;
 	meta->action = ONVM_NF_ACTION_PARA;
-	
+	meta->destination = 0;
+
         meta->numNF ++ ;
-	meta->destination = 3 ;
+	meta->destination |= (1 << 3);
 
 	meta->numNF ++ ;
-	meta->destination <<= 4;
-	meta->destination |= 4;
+	meta->destination |= (1 << 4);
+
+	meta->mutex_id = 1;
 
         return 0;
 }
@@ -121,7 +110,20 @@ main(int argc, char *argv[]) {
 
         nf_function_table = onvm_nflib_init_nf_function_table();
         nf_function_table->pkt_handler = &packet_handler;
-        nf_function_table->user_actions = &callback_handler;
+
+	//struct onvm_nf *nf = nf_local_ctx->nf;
+	//sem_t *mutex = sem_open("pkt_mutex", 0);
+	//nf->mutex = sem_open("pkt_mutex", 0);
+
+	//if(nf->mutex == SEM_FAILED) {
+	//	printf("semaphore open fail...\n");
+	//	exit(1);
+	//}
+
+	//sem_wait(nf->mutex);
+	//printf("if we reach here, mutex is lock\n");
+	//sem_post(nf->mutex);
+	//printf("if we reach here, mutex is unlock\n");
 
         if ((arg_offset = onvm_nflib_init(argc, argv, NF_TAG, nf_local_ctx, nf_function_table)) < 0) {
                 onvm_nflib_stop(nf_local_ctx);
@@ -145,8 +147,8 @@ main(int argc, char *argv[]) {
         last_cycle = rte_get_tsc_cycles();
 
         onvm_nflib_run(nf_local_ctx);
-
         onvm_nflib_stop(nf_local_ctx);
+
         printf("If we reach here, program is ending\n");
         return 0;
 }
