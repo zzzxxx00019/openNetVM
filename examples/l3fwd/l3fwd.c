@@ -284,42 +284,6 @@ nf_setup(struct onvm_nf_local_ctx *nf_local_ctx) {
                 printf("Hash table exact match enabled. \n");
                 printf("Hash entry number set to: %d\n", stats->hash_entry_number);
         }
-
-        /*
-         * Initialize neighbor's mac address
-         * it should be done during first NF
-         * but we fail to setup in NF 1
-         * neet to fix this bug in future
-         */
-        /*
-        for (int i=0 ; i<RTE_MAX_ETHPORTS ; i++){
-            if(ports->neighbor_mac[i].addr_bytes[0] == 0 && ports->neighbor_mac[i].addr_bytes[1] == 0 &&
-               ports->neighbor_mac[i].addr_bytes[2] == 0 && ports->neighbor_mac[i].addr_bytes[3] == 0 &&
-               ports->neighbor_mac[i].addr_bytes[4] == 0 && ports->neighbor_mac[i].addr_bytes[5] == 0 )
-            {
-                    ports->neighbor_mac[i].addr_bytes[0] = 255 ;
-                    ports->neighbor_mac[i].addr_bytes[1] = 255 ;
-                    ports->neighbor_mac[i].addr_bytes[2] = 255 ;
-                    ports->neighbor_mac[i].addr_bytes[3] = 255 ;
-                    ports->neighbor_mac[i].addr_bytes[4] = 255 ;
-                    ports->neighbor_mac[i].addr_bytes[5] = 255 ;
-            }
-        }
-        */
-
-        ports->neighbor_mac[0].addr_bytes[0] = 8 ;
-        ports->neighbor_mac[0].addr_bytes[1] = 0 ;
-        ports->neighbor_mac[0].addr_bytes[2] = 39 ;
-        ports->neighbor_mac[0].addr_bytes[3] = 158 ;
-        ports->neighbor_mac[0].addr_bytes[4] = 79 ;
-        ports->neighbor_mac[0].addr_bytes[5] = 121 ;
-
-        ports->neighbor_mac[1].addr_bytes[0] = 8 ;
-        ports->neighbor_mac[1].addr_bytes[1] = 0 ;
-        ports->neighbor_mac[1].addr_bytes[2] = 39 ;
-        ports->neighbor_mac[1].addr_bytes[3] = 104 ;
-        ports->neighbor_mac[1].addr_bytes[4] = 206 ;
-        ports->neighbor_mac[1].addr_bytes[5] = 124 ;
 }
 
 int
