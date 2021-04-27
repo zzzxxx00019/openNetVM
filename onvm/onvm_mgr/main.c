@@ -172,6 +172,33 @@ master_thread_main(void) {
         }
 
         RTE_LOG(INFO, APP, "Core %d: Master thread done\n", rte_lcore_id());
+	
+        char mutex_name[10][15] ;
+	strcpy(mutex_name[0], "pkt_mutex0");
+	strcpy(mutex_name[1], "pkt_mutex1");
+	strcpy(mutex_name[2], "pkt_mutex2");
+	strcpy(mutex_name[3], "pkt_mutex3");
+	strcpy(mutex_name[4], "pkt_mutex4");
+	strcpy(mutex_name[5], "pkt_mutex5");
+	strcpy(mutex_name[6], "pkt_mutex6");
+	strcpy(mutex_name[7], "pkt_mutex7");
+	strcpy(mutex_name[8], "pkt_mutex8");
+	strcpy(mutex_name[9], "pkt_mutex9");
+
+
+	for(i = 0 ; i < 10 ; i++) {
+		sem_t *mutex = sem_open(mutex_name[i],0);
+		sem_close(mutex);
+		if( sem_unlink(mutex_name[i]) ){
+			RTE_LOG(INFO, APP, "Binary semaphore destroy fail...\n");
+		}
+			
+	}
+	/*
+	if ( sem_unlink("pkt_mutex") ) {
+		RTE_LOG(INFO, APP, "Binary semaphore destroy fail...\n");
+	}
+	*/
 }
 
 /*
