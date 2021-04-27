@@ -82,6 +82,9 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
 static int
 onvm_pkt_drop(struct rte_mbuf *pkt);
 
+static sem_t* 
+onvm_get_pkt_mutex(int mutex_id);
+
 /**********************************Interfaces*********************************/
 
 void
@@ -89,7 +92,6 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
         uint16_t i, j;
         struct onvm_pkt_meta *meta;
         struct packet_buf *out_buf;
-	sem_t *mutex = sem_open("pkt_mutex", 0);
 
         if (tx_mgr == NULL || pkts == NULL || nf == NULL)
                 return;
@@ -99,16 +101,17 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                 meta->src = nf->instance_id;
 
 		if(meta->mutex_id) {
-			sem_wait(mutex);
+			sem_t *pkt_mutex = onvm_get_pkt_mutex(pkts[i]->hash.rss % 10);
+			sem_wait(pkt_mutex);
 			if (meta->numNF) {
 				if(meta->dispatcher) {
 					meta->dispatcher = 0;
 				} else if (--meta->numNF) {
-					sem_post(mutex);
+					sem_post(pkt_mutex);
 					continue;
 				}
 			}
-			sem_post(mutex);
+			sem_post(pkt_mutex);
 		}
                 
 		if (meta->action == ONVM_NF_ACTION_DROP) {
@@ -341,4 +344,21 @@ onvm_pkt_drop(struct rte_mbuf *pkt) {
                 return 1;
         }
         return 0;
+}
+
+static sem_t* 
+onvm_get_pkt_mutex(int mutex_id) {
+	char mutex_name[10][15] ;
+	strcpy(mutex_name[0], "pkt_mutex0");
+	strcpy(mutex_name[1], "pkt_mutex1");
+	strcpy(mutex_name[2], "pkt_mutex2");
+	strcpy(mutex_name[3], "pkt_mutex3");
+	strcpy(mutex_name[4], "pkt_mutex4");
+	strcpy(mutex_name[5], "pkt_mutex5");
+	strcpy(mutex_name[6], "pkt_mutex6");
+	strcpy(mutex_name[7], "pkt_mutex7");
+	strcpy(mutex_name[8], "pkt_mutex8");
+	strcpy(mutex_name[9], "pkt_mutex9");
+
+	return sem_open(mutex_name[mutex_id], 0);
 }
