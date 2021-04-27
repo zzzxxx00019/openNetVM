@@ -300,8 +300,6 @@ init_pkt_mutex(void) {
 	for(int i = 0 ; i < 10 ; i++){
 		sem_t *mutex = sem_open(mutex_name[i], O_CREAT | O_EXCL, 0644, 1);
 		if(mutex == SEM_FAILED) {
-			//fprintf(stderr, "can not create semaphore\n");
-			//sem_close(mutex);
 			sem_unlink(mutex_name[i]);
 			mutex = sem_open(mutex_name[i], O_CREAT | O_EXCL, 0644, 1);
 			if(mutex == SEM_FAILED){
@@ -313,14 +311,6 @@ init_pkt_mutex(void) {
 		printf("%s create success\n",mutex_name[i]);
 		sem_post(mutex);
 	}
-	/*
-        sem_t *mutex = sem_open ("pkt_mutex", O_CREAT | O_EXCL, 0644, 1);
-        if(mutex == SEM_FAILED) {
-		fprintf(stderr, "can not create semaphore\n");
-		sem_unlink("pkt_mutex");
-		exit(1);
-	}
-	*/	
 }
 
 /**

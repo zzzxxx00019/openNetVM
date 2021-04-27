@@ -194,11 +194,6 @@ master_thread_main(void) {
 		}
 			
 	}
-	/*
-	if ( sem_unlink("pkt_mutex") ) {
-		RTE_LOG(INFO, APP, "Binary semaphore destroy fail...\n");
-	}
-	*/
 }
 
 /*
