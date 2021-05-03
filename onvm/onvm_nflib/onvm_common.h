@@ -45,16 +45,16 @@
 #include <stdint.h>
 
 /* Std C library includes for shared core */
+#include <fcntl.h>
+#include <rte_ethdev.h>
+#include <rte_ether.h>
+#include <rte_hash.h>
+#include <rte_mbuf.h>
+#include <semaphore.h>
+#include <signal.h>
+#include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/types.h>
-#include <sys/ipc.h>
-#include <semaphore.h>
-#include <fcntl.h>
-#include <signal.h>
-#include <rte_ether.h>
-#include <rte_mbuf.h>
-#include <rte_hash.h>
-#include <rte_ethdev.h>
 
 #include "onvm_config_common.h"
 #include "onvm_msg_common.h"
@@ -72,18 +72,20 @@
 
 #define PACKET_READ_SIZE ((uint16_t)32)
 
-#define ONVM_NF_SHARE_CORES_DEFAULT 0  // default value for shared core logic, if true NFs sleep while waiting for packets
+#define ONVM_NF_SHARE_CORES_DEFAULT \
+        0  // default value for shared core logic, if true NFs sleep while waiting for packets
 
-#define PKT_WAKEUP_THRESHOLD 1 // for shared core mode, how many packets are required to wake up the NF
-#define MSG_WAKEUP_THRESHOLD 1 // for shared core mode, how many messages on an NF's ring are required to wake up the NF
+#define PKT_WAKEUP_THRESHOLD 1  // for shared core mode, how many packets are required to wake up the NF
+#define MSG_WAKEUP_THRESHOLD \
+        1  // for shared core mode, how many messages on an NF's ring are required to wake up the NF
 
 /* Default action */
 #define ONVM_NF_ACTION_NEXT 0
 #define ONVM_NF_ACTION_PARA 1
 /* Compara to NFs priorty */
-#define ONVM_NF_ACTION_TONF 2  
-#define ONVM_NF_ACTION_OUT  3
-#define ONVM_NF_ACTION_DROP 4 
+#define ONVM_NF_ACTION_TONF 2
+#define ONVM_NF_ACTION_OUT 3
+#define ONVM_NF_ACTION_DROP 4
 
 /* Used in setting bit flags for core options */
 #define MANUAL_CORE_ASSIGNMENT_BIT 0
@@ -111,13 +113,13 @@
 #define NF_TERM_STOP_ITER_TIMES 10
 
 struct onvm_pkt_meta {
-        uint8_t action;       /* Action to be performed */
+        uint8_t action;      /* Action to be performed */
         uint8_t destination; /* where to go next */
         uint8_t src;         /* who processed the packet last */
-        uint8_t chain_index;  /*index of the current step in the service chain*/
-	uint8_t numNF;        /* Number of parallel NFs */
-	uint8_t mutex_id;
-	bool dispatcher;
+        uint8_t chain_index; /*index of the current step in the service chain*/
+        uint8_t numNF;       /* Number of parallel NFs */
+        bool has_mutex;
+        bool dispatcher;
 };
 
 static inline struct onvm_pkt_meta *
@@ -127,7 +129,7 @@ onvm_get_pkt_meta(struct rte_mbuf *pkt) {
 
 static inline uint8_t
 onvm_get_pkt_chain_index(struct rte_mbuf *pkt) {
-        struct onvm_pkt_meta* pkt_meta = (struct onvm_pkt_meta*) &pkt->udata64;
+        struct onvm_pkt_meta *pkt_meta = (struct onvm_pkt_meta *)&pkt->udata64;
         return pkt_meta->chain_index;
 }
 
@@ -240,17 +242,17 @@ typedef void (*handle_signal_func)(int);
 
 /* Contains all functions the NF might use */
 struct onvm_nf_function_table {
-        nf_setup_fn  setup;
-        nf_msg_handler_fn  msg_handler;
+        nf_setup_fn setup;
+        nf_msg_handler_fn msg_handler;
         nf_user_actions_fn user_actions;
-        nf_pkt_handler_fn  pkt_handler;
+        nf_pkt_handler_fn pkt_handler;
 };
 
 /* Information needed to initialize a new NF child thread */
 struct onvm_nf_scale_info {
         struct onvm_nf_init_cfg *nf_init_cfg;
         struct onvm_nf *parent;
-        void * data;
+        void *data;
         struct onvm_nf_function_table *function_table;
 };
 
@@ -321,11 +323,11 @@ struct onvm_nf {
         } stats;
 
         struct {
-                 /* 
-                  * Sleep state (shared mem variable) to track state of NF and trigger wakeups 
-                  *     sleep_state = 1 => NF sleeping (waiting on semaphore)
-                  *     sleep_state = 0 => NF running (not waiting on semaphore)
-                  */
+                /*
+                 * Sleep state (shared mem variable) to track state of NF and trigger wakeups
+                 *     sleep_state = 1 => NF sleeping (waiting on semaphore)
+                 *     sleep_state = 0 => NF running (not waiting on semaphore)
+                 */
                 rte_atomic16_t *sleep_state;
                 /* Mutex for NF sem_wait */
                 sem_t *nf_mutex;
@@ -370,8 +372,9 @@ struct lpm_request {
         int status;
 };
 
-/* 
- * Structure used to initiate a flow tables hash_table from a secondary process, it is enqueued onto the managers message ring
+/*
+ * Structure used to initiate a flow tables hash_table from a secondary process, it is enqueued onto the managers
+ * message ring
  */
 struct ft_request {
         struct rte_hash_parameters *ipv4_hash_params;
@@ -398,8 +401,8 @@ struct ft_request {
 #define _NF_MSG_POOL_NAME "NF_MSG_MEMPOOL"
 
 /* interrupt semaphore specific updates */
-#define SHMSZ 4                         // size of shared memory segement (page_size)
-#define KEY_PREFIX 123                  // prefix len for key
+#define SHMSZ 4         // size of shared memory segement (page_size)
+#define KEY_PREFIX 123  // prefix len for key
 
 /* common names for NF states */
 #define NF_WAITING_FOR_ID 0       // First step in startup process, doesn't have ID confirmed by manager yet

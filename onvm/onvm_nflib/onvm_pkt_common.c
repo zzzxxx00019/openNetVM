@@ -82,7 +82,7 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
 static int
 onvm_pkt_drop(struct rte_mbuf *pkt);
 
-static sem_t* 
+static sem_t *
 onvm_get_pkt_mutex(int mutex_id);
 
 /**********************************Interfaces*********************************/
@@ -100,21 +100,20 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                 meta = (struct onvm_pkt_meta *)&(((struct rte_mbuf *)pkts[i])->udata64);
                 meta->src = nf->instance_id;
 
-		if(meta->mutex_id) {
-			sem_t *pkt_mutex = onvm_get_pkt_mutex(pkts[i]->hash.rss % 10);
-			sem_wait(pkt_mutex);
-			if (meta->numNF) {
-				if(meta->dispatcher) {
-					meta->dispatcher = 0;
-				} else if (--meta->numNF) {
-					sem_post(pkt_mutex);
-					continue;
-				}
-			}
-			sem_post(pkt_mutex);
-		}
-                
-		if (meta->action == ONVM_NF_ACTION_DROP) {
+                if (meta->has_mutex) {
+                        sem_t *pkt_mutex = onvm_get_pkt_mutex(pkts[i]->hash.rss % 10);
+                        sem_wait(pkt_mutex);
+                        if (meta->numNF) {
+                                if (--meta->numNF) {
+                                        sem_post(pkt_mutex);
+                                        continue;
+                                }
+                        }
+                        meta->has_mutex = false;
+                        sem_post(pkt_mutex);
+                }
+
+                if (meta->action == ONVM_NF_ACTION_DROP) {
                         // if the packet is drop, then <return value> is 0
                         // and !<return value> is 1.
                         nf->stats.act_drop++;
@@ -135,16 +134,18 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                                 onvm_pkt_enqueue_tx_thread(out_buf, nf);
                         } else {
                                 onvm_pkt_enqueue_port(tx_mgr, meta->destination, pkts[i]);
-			}
+                        }
                 } else if (meta->action == ONVM_NF_ACTION_PARA) {
-			uint8_t dst = meta->destination;
-			for(j = 0 ; j < 16 ; j++) {
-				if ((dst >> j) & 1){
-					nf->stats.act_tonf++;
-					onvm_pkt_enqueue_nf(tx_mgr, j, pkts[i], nf);
-				}
-			}
-		} else {
+                        uint8_t dst = meta->destination;
+                        meta->has_mutex = true;
+                        for (j = 0; j < 16; j++) {
+                                if ((dst >> j) & 1) {
+                                        meta->numNF++;
+                                        nf->stats.act_tonf++;
+                                        onvm_pkt_enqueue_nf(tx_mgr, j, pkts[i], nf);
+                                }
+                        }
+                } else {
                         printf("ERROR invalid action : this shouldn't happen.\n");
                         onvm_pkt_drop(pkts[i]);
                         return;
@@ -313,6 +314,19 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
                 meta->destination = onvm_sc_next_destination(default_chain, pkt);
         }
 
+        if (meta->has_mutex) {
+                sem_t *pkt_mutex = onvm_get_pkt_mutex(pkt->hash.rss % 10);
+                sem_wait(pkt_mutex);
+                if (meta->numNF) {
+                        if (--meta->numNF) {
+                                sem_post(pkt_mutex);
+                                return;
+                        }
+                }
+                meta->has_mutex = false;
+                sem_post(pkt_mutex);
+        }
+
         switch (meta->action) {
                 case ONVM_NF_ACTION_DROP:
                         // if the packet is drop, then <return value> is 0
@@ -327,6 +341,17 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
                         nf->stats.act_out++;
                         onvm_pkt_enqueue_port(tx_mgr, meta->destination, pkt);
                         break;
+                case ONVM_NF_ACTION_PARA:
+                        meta->has_mutex = true;
+                        int dst = meta->destination;
+                        for (int j = 0; j < 16; j++) {
+                                if ((dst >> j) & 1) {
+                                        meta->numNF++;
+                                        nf->stats.act_tonf++;
+                                        onvm_pkt_enqueue_nf(tx_mgr, j, pkt, nf);
+                                }
+                        }
+
                 default:
                         break;
         }
@@ -338,27 +363,27 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
 static int
 onvm_pkt_drop(struct rte_mbuf *pkt) {
         if (!pkt)
-		return 1;
-	rte_pktmbuf_free(pkt);
+                return 1;
+        rte_pktmbuf_free(pkt);
         if (pkt != NULL) {
                 return 1;
         }
         return 0;
 }
 
-static sem_t* 
+static sem_t *
 onvm_get_pkt_mutex(int mutex_id) {
-	char mutex_name[10][15] ;
-	strcpy(mutex_name[0], "pkt_mutex0");
-	strcpy(mutex_name[1], "pkt_mutex1");
-	strcpy(mutex_name[2], "pkt_mutex2");
-	strcpy(mutex_name[3], "pkt_mutex3");
-	strcpy(mutex_name[4], "pkt_mutex4");
-	strcpy(mutex_name[5], "pkt_mutex5");
-	strcpy(mutex_name[6], "pkt_mutex6");
-	strcpy(mutex_name[7], "pkt_mutex7");
-	strcpy(mutex_name[8], "pkt_mutex8");
-	strcpy(mutex_name[9], "pkt_mutex9");
+        char mutex_name[10][15];
+        strcpy(mutex_name[0], "pkt_mutex0");
+        strcpy(mutex_name[1], "pkt_mutex1");
+        strcpy(mutex_name[2], "pkt_mutex2");
+        strcpy(mutex_name[3], "pkt_mutex3");
+        strcpy(mutex_name[4], "pkt_mutex4");
+        strcpy(mutex_name[5], "pkt_mutex5");
+        strcpy(mutex_name[6], "pkt_mutex6");
+        strcpy(mutex_name[7], "pkt_mutex7");
+        strcpy(mutex_name[8], "pkt_mutex8");
+        strcpy(mutex_name[9], "pkt_mutex9");
 
-	return sem_open(mutex_name[mutex_id], 0);
+        return sem_open(mutex_name[mutex_id], 0);
 }
