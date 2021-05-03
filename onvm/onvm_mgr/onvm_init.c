@@ -66,10 +66,10 @@ uint16_t *nf_per_service_count;
 struct onvm_service_chain *default_chain;
 struct onvm_service_chain **default_sc_p;
 
-//sem_t *mutex;
+// sem_t *mutex;
 /*************************Internal Functions Prototypes***********************/
 
-static void 
+static void
 init_pkt_mutex(void);
 
 static void
@@ -118,15 +118,19 @@ check_all_ports_link_status(uint8_t port_num, uint32_t port_mask);
 #define TX_WTHRESH 0  /* Default values of TX write-back threshold reg. */
 
 static const struct rte_eth_conf port_conf = {
-    .rxmode = {
+    .rxmode =
+        {
             .mq_mode = ETH_MQ_RX_RSS,
             .max_rx_pkt_len = RTE_ETHER_MAX_LEN,
             .split_hdr_size = 0,
             .offloads = DEV_RX_OFFLOAD_CHECKSUM,
         },
-    .rx_adv_conf = {
-            .rss_conf = {
-                    .rss_key = rss_symmetric_key, .rss_hf = ETH_RSS_IP | ETH_RSS_UDP | ETH_RSS_TCP | ETH_RSS_L2_PAYLOAD,
+    .rx_adv_conf =
+        {
+            .rss_conf =
+                {
+                    .rss_key = rss_symmetric_key,
+                    .rss_hf = ETH_RSS_IP | ETH_RSS_UDP | ETH_RSS_TCP | ETH_RSS_L2_PAYLOAD,
                 },
         },
     .txmode = {.mq_mode = ETH_MQ_TX_NONE,
@@ -160,17 +164,17 @@ init(int argc, char *argv[]) {
         /* get total number of ports */
         total_ports = rte_eth_dev_count_avail();
 
-	/* initial shared mutex */
-	/*
-	sem_t *mutex = sem_open ("pkt_mutex", O_CREAT | O_EXCL, 0644, 1);
-	if(mutex == SEM_FAILED) {
-		fprintf(stderr, "can not create semaphore\n");
-		sem_unlink("pkt_mutex");
-		exit(1);
-	}
-	*/
-	init_pkt_mutex();
-	
+        /* initial shared mutex */
+        /*
+        sem_t *mutex = sem_open ("pkt_mutex", O_CREAT | O_EXCL, 0644, 1);
+        if(mutex == SEM_FAILED) {
+                fprintf(stderr, "can not create semaphore\n");
+                sem_unlink("pkt_mutex");
+                exit(1);
+        }
+        */
+        init_pkt_mutex();
+
         /* set up array for NF tx data */
         mz_nf = rte_memzone_reserve(MZ_NF_INFO, sizeof(*nfs) * MAX_NFS, rte_socket_id(), NO_FLAGS);
         if (mz_nf == NULL)
@@ -285,32 +289,32 @@ init(int argc, char *argv[]) {
 
 static void
 init_pkt_mutex(void) {
-	char mutex_name[10][15] ;
-	strcpy(mutex_name[0], "pkt_mutex0");
-	strcpy(mutex_name[1], "pkt_mutex1");
-	strcpy(mutex_name[2], "pkt_mutex2");
-	strcpy(mutex_name[3], "pkt_mutex3");
-	strcpy(mutex_name[4], "pkt_mutex4");
-	strcpy(mutex_name[5], "pkt_mutex5");
-	strcpy(mutex_name[6], "pkt_mutex6");
-	strcpy(mutex_name[7], "pkt_mutex7");
-	strcpy(mutex_name[8], "pkt_mutex8");
-	strcpy(mutex_name[9], "pkt_mutex9");
+        char mutex_name[10][15];
+        strcpy(mutex_name[0], "pkt_mutex0");
+        strcpy(mutex_name[1], "pkt_mutex1");
+        strcpy(mutex_name[2], "pkt_mutex2");
+        strcpy(mutex_name[3], "pkt_mutex3");
+        strcpy(mutex_name[4], "pkt_mutex4");
+        strcpy(mutex_name[5], "pkt_mutex5");
+        strcpy(mutex_name[6], "pkt_mutex6");
+        strcpy(mutex_name[7], "pkt_mutex7");
+        strcpy(mutex_name[8], "pkt_mutex8");
+        strcpy(mutex_name[9], "pkt_mutex9");
 
-	for(int i = 0 ; i < 10 ; i++){
-		sem_t *mutex = sem_open(mutex_name[i], O_CREAT | O_EXCL, 0644, 1);
-		if(mutex == SEM_FAILED) {
-			sem_unlink(mutex_name[i]);
-			mutex = sem_open(mutex_name[i], O_CREAT | O_EXCL, 0644, 1);
-			if(mutex == SEM_FAILED){
-				fprintf(stderr, "can not create semaphore\n");
-				exit(1);
-			}
-		}
-		sem_wait(mutex);
-		printf("%s create success\n",mutex_name[i]);
-		sem_post(mutex);
-	}
+        for (int i = 0; i < 10; i++) {
+                sem_t *mutex = sem_open(mutex_name[i], O_CREAT | O_EXCL, 0644, 1);
+                if (mutex == SEM_FAILED) {
+                        sem_unlink(mutex_name[i]);
+                        mutex = sem_open(mutex_name[i], O_CREAT | O_EXCL, 0644, 1);
+                        if (mutex == SEM_FAILED) {
+                                fprintf(stderr, "can not create semaphore\n");
+                                exit(1);
+                        }
+                }
+                sem_wait(mutex);
+                printf("%s create success\n", mutex_name[i]);
+                sem_post(mutex);
+        }
 }
 
 /**
@@ -360,7 +364,7 @@ init_nf_init_cfg_pool(void) {
          * create as it seems faster to use a cache instead */
         printf("Creating mbuf pool '%s' ...\n", _NF_MEMPOOL_NAME);
         nf_init_cfg_pool = rte_mempool_create(_NF_MEMPOOL_NAME, MAX_NFS, NF_INFO_SIZE, 0, 0, NULL, NULL, NULL, NULL,
-                                          rte_socket_id(), NO_FLAGS);
+                                              rte_socket_id(), NO_FLAGS);
 
         return (nf_init_cfg_pool == NULL); /* 0 on success */
 }
@@ -456,7 +460,7 @@ init_shared_sem(void) {
         int shmid;
         char *shm;
         sem_t *mutex;
-        const char * sem_name;
+        const char *sem_name;
 
         nf_wakeup_infos = rte_calloc("MGR_SHM_INFOS", sizeof(struct nf_wakeup_info), MAX_NFS, 0);
 
@@ -481,7 +485,7 @@ init_shared_sem(void) {
                         exit(1);
                 }
 
-                if ((shm = shmat(shmid, NULL, 0)) == (char *) -1) {
+                if ((shm = shmat(shmid, NULL, 0)) == (char *)-1) {
                         fprintf(stderr, "can not attach the shared segment to the server space for NF %d\n", i);
                         exit(1);
                 }

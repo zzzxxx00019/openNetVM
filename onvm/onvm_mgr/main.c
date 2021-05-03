@@ -106,8 +106,9 @@ master_thread_main(void) {
                 if (stats_destination != ONVM_STATS_NONE)
                         onvm_stats_display_all(sleeptime, verbosity_level);
 
-                if (time_to_live && unlikely((rte_get_tsc_cycles() - start_time) * TIME_TTL_MULTIPLIER /
-                                             rte_get_timer_hz() >= time_to_live)) {
+                if (time_to_live &&
+                    unlikely((rte_get_tsc_cycles() - start_time) * TIME_TTL_MULTIPLIER / rte_get_timer_hz() >=
+                             time_to_live)) {
                         printf("Time to live exceeded, shutting down\n");
                         main_keep_running = 0;
                 }
@@ -116,7 +117,7 @@ master_thread_main(void) {
                         total_rx_pkts = 0;
                         for (i = 0; i < ports->num_ports; i++)
                                 total_rx_pkts += ports->rx_stats.rx[ports->id[i]];
-                        if (unlikely(total_rx_pkts >= (uint64_t) pkt_limit * PKT_TTL_MULTIPLIER)) {
+                        if (unlikely(total_rx_pkts >= (uint64_t)pkt_limit * PKT_TTL_MULTIPLIER)) {
                                 printf("Packet limit exceeded, shutting down\n");
                                 main_keep_running = 0;
                         }
@@ -172,28 +173,26 @@ master_thread_main(void) {
         }
 
         RTE_LOG(INFO, APP, "Core %d: Master thread done\n", rte_lcore_id());
-	
-        char mutex_name[10][15] ;
-	strcpy(mutex_name[0], "pkt_mutex0");
-	strcpy(mutex_name[1], "pkt_mutex1");
-	strcpy(mutex_name[2], "pkt_mutex2");
-	strcpy(mutex_name[3], "pkt_mutex3");
-	strcpy(mutex_name[4], "pkt_mutex4");
-	strcpy(mutex_name[5], "pkt_mutex5");
-	strcpy(mutex_name[6], "pkt_mutex6");
-	strcpy(mutex_name[7], "pkt_mutex7");
-	strcpy(mutex_name[8], "pkt_mutex8");
-	strcpy(mutex_name[9], "pkt_mutex9");
 
+        char mutex_name[10][15];
+        strcpy(mutex_name[0], "pkt_mutex0");
+        strcpy(mutex_name[1], "pkt_mutex1");
+        strcpy(mutex_name[2], "pkt_mutex2");
+        strcpy(mutex_name[3], "pkt_mutex3");
+        strcpy(mutex_name[4], "pkt_mutex4");
+        strcpy(mutex_name[5], "pkt_mutex5");
+        strcpy(mutex_name[6], "pkt_mutex6");
+        strcpy(mutex_name[7], "pkt_mutex7");
+        strcpy(mutex_name[8], "pkt_mutex8");
+        strcpy(mutex_name[9], "pkt_mutex9");
 
-	for(i = 0 ; i < 10 ; i++) {
-		sem_t *mutex = sem_open(mutex_name[i],0);
-		sem_close(mutex);
-		if( sem_unlink(mutex_name[i]) ){
-			RTE_LOG(INFO, APP, "Binary semaphore destroy fail...\n");
-		}
-			
-	}
+        for (i = 0; i < 10; i++) {
+                sem_t *mutex = sem_open(mutex_name[i], 0);
+                sem_close(mutex);
+                if (sem_unlink(mutex_name[i])) {
+                        RTE_LOG(INFO, APP, "Binary semaphore destroy fail...\n");
+                }
+        }
 }
 
 /*
@@ -298,8 +297,7 @@ wakeup_thread_main(void *arg) {
         struct wakeup_thread_context *wakeup_ctx = (struct wakeup_thread_context *)arg;
 
         if (wakeup_ctx->first_nf == wakeup_ctx->last_nf - 1) {
-                RTE_LOG(INFO, APP, "Core %d: Running Wakeup thread for NF %d\n", rte_lcore_id(),
-                        wakeup_ctx->first_nf);
+                RTE_LOG(INFO, APP, "Core %d: Running Wakeup thread for NF %d\n", rte_lcore_id(), wakeup_ctx->first_nf);
         } else if (wakeup_ctx->first_nf < wakeup_ctx->last_nf) {
                 RTE_LOG(INFO, APP, "Core %d: Running Wakeup thread for NFs %d to %d\n", rte_lcore_id(),
                         wakeup_ctx->first_nf, wakeup_ctx->last_nf - 1);
@@ -328,20 +326,20 @@ wakeup_thread_main(void *arg) {
  * Function to free all allocated memory from main function.
  */
 static void
-onvm_main_free(unsigned tx_lcores, unsigned rx_lcores, struct queue_mgr *tx_mgr[],
-struct queue_mgr *rx_mgr[], struct wakeup_thread_context *wakeup_ctx[]) {
+onvm_main_free(unsigned tx_lcores, unsigned rx_lcores, struct queue_mgr *tx_mgr[], struct queue_mgr *rx_mgr[],
+               struct wakeup_thread_context *wakeup_ctx[]) {
         unsigned i;
         for (i = 0; i < tx_lcores; i++) {
                 if (tx_mgr[i] == NULL) {
                         break;
                 }
-                if (tx_mgr[i]-> nf_rx_bufs != NULL) {
+                if (tx_mgr[i]->nf_rx_bufs != NULL) {
                         rte_free(tx_mgr[i]->nf_rx_bufs);
                 }
                 if (tx_mgr[i]->tx_thread_info->port_tx_bufs != NULL) {
                         rte_free(tx_mgr[i]->tx_thread_info->port_tx_bufs);
                 }
-                if (tx_mgr[i]-> tx_thread_info != NULL) {
+                if (tx_mgr[i]->tx_thread_info != NULL) {
                         rte_free(tx_mgr[i]->tx_thread_info);
                 }
                 rte_free(tx_mgr[i]);
@@ -456,7 +454,7 @@ main(int argc, char *argv[]) {
                 if (rte_eal_remote_launch(tx_thread_main, (void *)tx_mgr[i], cur_lcore) == -EBUSY) {
                         RTE_LOG(ERR, APP, "Core %d is already busy, can't use for nf %d TX\n", cur_lcore,
                                 tx_mgr[i]->tx_thread_info->first_nf);
-                        onvm_main_free(tx_lcores,rx_lcores, tx_mgr, rx_mgr, wakeup_ctx);
+                        onvm_main_free(tx_lcores, rx_lcores, tx_mgr, rx_mgr, wakeup_ctx);
                         return -1;
                 }
         }
@@ -471,14 +469,14 @@ main(int argc, char *argv[]) {
                 rx_mgr[i]->id = i;
                 rx_mgr[i]->tx_thread_info = NULL;
                 rx_mgr[i]->nf_rx_bufs = rte_calloc(NULL, MAX_NFS, sizeof(struct packet_buf), RTE_CACHE_LINE_SIZE);
-                if (rx_mgr[i] -> nf_rx_bufs == NULL) {
+                if (rx_mgr[i]->nf_rx_bufs == NULL) {
                         goto onvm_free;
                 }
                 cur_lcore = rte_get_next_lcore(cur_lcore, 1, 1);
                 if (rte_eal_remote_launch(rx_thread_main, (void *)rx_mgr[i], cur_lcore) == -EBUSY) {
                         RTE_LOG(ERR, APP, "Core %d is already busy, can't use for RX queue id %d\n", cur_lcore,
                                 rx_mgr[i]->id);
-                        onvm_main_free(tx_lcores,rx_lcores, tx_mgr, rx_mgr, wakeup_ctx);
+                        onvm_main_free(tx_lcores, rx_lcores, tx_mgr, rx_mgr, wakeup_ctx);
                         return -1;
                 }
         }
@@ -493,7 +491,7 @@ main(int argc, char *argv[]) {
                         wakeup_ctx[i]->first_nf = RTE_MIN(i * nfs_per_wakeup_thread + 1, (unsigned)MAX_NFS);
                         wakeup_ctx[i]->last_nf = RTE_MIN((i + 1) * nfs_per_wakeup_thread + 1, (unsigned)MAX_NFS);
                         cur_lcore = rte_get_next_lcore(cur_lcore, 1, 1);
-                        if (rte_eal_remote_launch(wakeup_thread_main, (void*)wakeup_ctx[i], cur_lcore) == -EBUSY) {
+                        if (rte_eal_remote_launch(wakeup_thread_main, (void *)wakeup_ctx[i], cur_lcore) == -EBUSY) {
                                 RTE_LOG(ERR, APP, "Core %d is already busy, can't use for nf %d wakeup thread\n",
                                         cur_lcore, wakeup_ctx[i]->first_nf);
                                 onvm_main_free(tx_lcores, rx_lcores, tx_mgr, rx_mgr, wakeup_ctx);
@@ -503,11 +501,11 @@ main(int argc, char *argv[]) {
         }
         /* Master thread handles statistics and NF management */
         master_thread_main();
-        onvm_main_free(tx_lcores,rx_lcores, tx_mgr, rx_mgr, wakeup_ctx);
+        onvm_main_free(tx_lcores, rx_lcores, tx_mgr, rx_mgr, wakeup_ctx);
         return 0;
 
 onvm_free:
         RTE_LOG(ERR, APP, "Can't allocate required struct.\n");
-        onvm_main_free(tx_lcores,rx_lcores, tx_mgr, rx_mgr, wakeup_ctx);
+        onvm_main_free(tx_lcores, rx_lcores, tx_mgr, rx_mgr, wakeup_ctx);
         return -1;
 }
