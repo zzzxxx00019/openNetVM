@@ -9,3 +9,6 @@
         branch = master
         commit = 807b4d2cfcc8ded46ece85353cefe5d655674de3
 
+[submodule "hyperscan"]
+	path = hyperscan
+	url = https://github.com/intel/hyperscan
