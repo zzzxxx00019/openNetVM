@@ -126,4 +126,23 @@ onvm_pkt_flush_port_queue(struct queue_mgr *tx_mgr, uint16_t port);
 void
 onvm_pkt_enqueue_tx_thread(struct packet_buf *pkt_buf, struct onvm_nf *nf);
 
+/*
+ * Set packet meta action and destination
+ * This API will check priority when run parallel
+ *
+ * Inputs : a pointer to packet
+ *          a action will to do
+ *          a destination will to send
+ */
+int
+onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination);
+
+/*
+ * Get packet's mutex to avoid race conditions
+ *
+ * Input : packet's rss % 10 due to 10 mutex set
+ */
+sem_t *
+onvm_get_pkt_mutex(int mutex_id);
+
 #endif  // _ONVM_PKT_COMMON_H_

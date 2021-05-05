@@ -82,7 +82,21 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
 static int
 onvm_pkt_drop(struct rte_mbuf *pkt);
 
-static sem_t *
+/*
+ * Set packet meta action and destination
+ * This API will check priority when run parallel
+ *
+ * Inputs : a pointer to packet
+ *          a action will to do
+ *          a destination will to send
+ */
+int
+onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination);
+
+/*
+ * Get packet's mutex to avoid race conditions
+ */
+inline sem_t *
 onvm_get_pkt_mutex(int mutex_id);
 
 /**********************************Interfaces*********************************/
@@ -138,6 +152,7 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                 } else if (meta->action == ONVM_NF_ACTION_PARA) {
                         uint8_t dst = meta->destination;
                         meta->has_mutex = true;
+                        meta->numNF = 0;
                         for (j = 0; j < 16; j++) {
                                 if ((dst >> j) & 1) {
                                         meta->numNF++;
@@ -304,14 +319,16 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
         struct onvm_pkt_meta *meta = onvm_get_pkt_meta(pkt);
         int ret;
 
+        /*Bug, flow_entry will cause segementation fault*/
         ret = onvm_flow_dir_get_pkt(pkt, &flow_entry);
         if (ret >= 0) {
                 sc = flow_entry->sc;
                 meta->action = onvm_sc_next_action(sc, pkt);
                 meta->destination = onvm_sc_next_destination(sc, pkt);
         } else {
-                meta->action = onvm_sc_next_action(default_chain, pkt);
-                meta->destination = onvm_sc_next_destination(default_chain, pkt);
+                meta->action = ONVM_NF_ACTION_DROP;
+                // meta->action = onvm_sc_next_action(default_chain, pkt);
+                // meta->destination = onvm_sc_next_destination(default_chain, pkt);
         }
 
         if (meta->has_mutex) {
@@ -343,6 +360,7 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
                         break;
                 case ONVM_NF_ACTION_PARA:
                         meta->has_mutex = true;
+                        meta->numNF = 0;
                         int dst = meta->destination;
                         for (int j = 0; j < 16; j++) {
                                 if ((dst >> j) & 1) {
@@ -371,19 +389,49 @@ onvm_pkt_drop(struct rte_mbuf *pkt) {
         return 0;
 }
 
-static sem_t *
-onvm_get_pkt_mutex(int mutex_id) {
-        char mutex_name[10][15];
-        strcpy(mutex_name[0], "pkt_mutex0");
-        strcpy(mutex_name[1], "pkt_mutex1");
-        strcpy(mutex_name[2], "pkt_mutex2");
-        strcpy(mutex_name[3], "pkt_mutex3");
-        strcpy(mutex_name[4], "pkt_mutex4");
-        strcpy(mutex_name[5], "pkt_mutex5");
-        strcpy(mutex_name[6], "pkt_mutex6");
-        strcpy(mutex_name[7], "pkt_mutex7");
-        strcpy(mutex_name[8], "pkt_mutex8");
-        strcpy(mutex_name[9], "pkt_mutex9");
+int
+onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination) {
+        struct onvm_pkt_meta *meta = onvm_get_pkt_meta(pkt);
 
-        return sem_open(mutex_name[mutex_id], 0);
+        if (meta->has_mutex) {
+                sem_t *pkt_mutex = onvm_get_pkt_mutex(pkt->hash.rss % 10);
+                sem_wait(pkt_mutex);
+                if (action > meta->action) {
+                        meta->action = action;
+                        meta->destination = destination;
+                }
+                sem_post(pkt_mutex);
+        } else {
+                meta->action = action;
+                meta->destination = destination;
+        }
+
+        return 0;
+}
+
+inline sem_t *
+onvm_get_pkt_mutex(int mutex_id) {
+        switch (mutex_id) {
+                case 0:
+                        return sem_open("pkt_mutex0", 0);
+                case 1:
+                        return sem_open("pkt_mutex1", 0);
+                case 2:
+                        return sem_open("pkt_mutex2", 0);
+                case 3:
+                        return sem_open("pkt_mutex3", 0);
+                case 4:
+                        return sem_open("pkt_mutex4", 0);
+                case 5:
+                        return sem_open("pkt_mutex5", 0);
+                case 6:
+                        return sem_open("pkt_mutex6", 0);
+                case 7:
+                        return sem_open("pkt_mutex7", 0);
+                case 8:
+                        return sem_open("pkt_mutex8", 0);
+                case 9:
+                        return sem_open("pkt_mutex9", 0);
+        }
+        return NULL;
 }
