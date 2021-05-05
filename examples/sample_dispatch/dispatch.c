@@ -23,9 +23,8 @@
 
 /* number of package between each print */
 static uint32_t print_delay = 1000000;
-//static uint32_t latency = 0 ;
+const uint8_t arp_response = 2;
 
-static uint32_t total_packets = 0;
 static uint64_t last_cycle;
 static uint64_t cur_cycles;
 
@@ -77,23 +76,23 @@ parse_app_args(int argc, char *argv[], const char *progname) {
 static int
 packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
-        
-	total_packets++;
        
-	(void) pkt;
-
-	meta->numNF = 0;
-	meta->dispatcher = 1;
-	meta->action = ONVM_NF_ACTION_PARA;
-	meta->destination = 0;
-
-        meta->numNF ++ ;
-	meta->destination |= (1 << 3);
-
-	meta->numNF ++ ;
-	meta->destination |= (1 << 4);
-
-	meta->mutex_id = 1;
+        if(!onvm_pkt_is_ipv4(pkt)) {
+            onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, arp_response);
+            return 0;
+        }
+        // When use parallel action, must initial dst to 0 before setting
+        uint8_t dst = 0;
+        // Destination 3 is payload read test NF, Set payload_read flag to 1
+        meta->payload_read = true;
+        dst |= (1 << 3);
+        // Destination 4 is payload write test NF, Set payload_write flag to 1
+        meta->payload_write = true;
+        dst |= (1 << 4);
+        // Destination 5 is l3fwd
+        dst |= (1 << 5);
+        
+        onvm_pkt_set_action(pkt, ONVM_NF_ACTION_PARA, dst);
 
         return 0;
 }
@@ -110,20 +109,6 @@ main(int argc, char *argv[]) {
 
         nf_function_table = onvm_nflib_init_nf_function_table();
         nf_function_table->pkt_handler = &packet_handler;
-
-	//struct onvm_nf *nf = nf_local_ctx->nf;
-	//sem_t *mutex = sem_open("pkt_mutex", 0);
-	//nf->mutex = sem_open("pkt_mutex", 0);
-
-	//if(nf->mutex == SEM_FAILED) {
-	//	printf("semaphore open fail...\n");
-	//	exit(1);
-	//}
-
-	//sem_wait(nf->mutex);
-	//printf("if we reach here, mutex is lock\n");
-	//sem_post(nf->mutex);
-	//printf("if we reach here, mutex is unlock\n");
 
         if ((arg_offset = onvm_nflib_init(argc, argv, NF_TAG, nf_local_ctx, nf_function_table)) < 0) {
                 onvm_nflib_stop(nf_local_ctx);
