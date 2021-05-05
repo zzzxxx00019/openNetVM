@@ -38,7 +38,6 @@
  * l3switch.c - Layer 3 forwarding application with either exact match or LPM table.
  ********************************************************************/
 
-
 #include <errno.h>
 #include <getopt.h>
 #include <inttypes.h>
@@ -53,13 +52,13 @@
 #include <rte_common.h>
 #include <rte_ip.h>
 #include <rte_lpm.h>
-#include <rte_mbuf.h>
 #include <rte_malloc.h>
+#include <rte_mbuf.h>
 
-#include "onvm_nflib.h"
-#include "onvm_flow_table.h"
-#include "onvm_pkt_helper.h"
 #include "l3fwd.h"
+#include "onvm_flow_table.h"
+#include "onvm_nflib.h"
+#include "onvm_pkt_helper.h"
 
 #define NF_TAG "l3switch"
 
@@ -128,18 +127,17 @@ print_stats(__attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
         printf("\nPort statistics ====================================");
         int i;
         for (i = 0; i < ports->num_ports; i++) {
-                printf("\nStatistics for port %u ------------------------------"
-                          "\nPackets forwarded to: %20"PRIu64,
-                           ports->id[i],
-                           stats->port_statistics[ports->id[i]]);
+                printf(
+                    "\nStatistics for port %u ------------------------------"
+                    "\nPackets forwarded to: %20" PRIu64,
+                    ports->id[i], stats->port_statistics[ports->id[i]]);
 
-               total_packets += stats->port_statistics[ports->id[i]];
+                total_packets += stats->port_statistics[ports->id[i]];
         }
-        printf("\nAggregate statistics ==============================="
-                   "\nTotal packets forwarded: %17"PRIu64
-                   "\nPackets dropped: %18"PRIu64,
-                   total_packets,
-                   stats->packets_dropped);
+        printf(
+            "\nAggregate statistics ==============================="
+            "\nTotal packets forwarded: %17" PRIu64 "\nPackets dropped: %18" PRIu64,
+            total_packets, stats->packets_dropped);
         printf("\n====================================================\n");
 
         printf("\n\n");
@@ -160,8 +158,8 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
         struct state_info *stats = (struct state_info *)nf->data;
 
         if (counter++ == stats->print_delay) {
-               print_stats(nf_local_ctx);
-               counter = 0;
+                print_stats(nf_local_ctx);
+                counter = 0;
         }
         struct rte_ether_hdr *eth_hdr;
         struct ipv4_hdr *ipv4_hdr;
@@ -170,13 +168,12 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
         eth_hdr = rte_pktmbuf_mtod(pkt, struct rte_ether_hdr *);
         if (onvm_pkt_is_ipv4(pkt)) {
                 /* Handle IPv4 headers.*/
-                ipv4_hdr = rte_pktmbuf_mtod_offset(pkt, struct ipv4_hdr *,
-                                                   sizeof(struct rte_ether_hdr));
+                ipv4_hdr = rte_pktmbuf_mtod_offset(pkt, struct ipv4_hdr *, sizeof(struct rte_ether_hdr));
 
 #ifdef DO_RFC_1812_CHECKS
                 /* Check to make sure the packet is valid (RFC1812) */
                 if (is_valid_ipv4_pkt(ipv4_hdr, pkt->pkt_len) < 0) {
-                        meta->action = ONVM_NF_ACTION_DROP;
+                        onvm_pkt_set_action(pkt, ONVM_NF_ACTION_DROP, 0);
                         packets_dropped++;
                         return 0;
                 }
@@ -186,8 +183,7 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                 } else {
                         dst_port = em_get_ipv4_dst_port(pkt, stats);
                 }
-                if (dst_port >= RTE_MAX_ETHPORTS ||
-                        get_initialized_ports(dst_port) == 0)
+                if (dst_port >= RTE_MAX_ETHPORTS || get_initialized_ports(dst_port) == 0)
                         dst_port = pkt->port;
 
 #ifdef DO_RFC_1812_CHECKS
@@ -197,16 +193,14 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
 #endif
                 /* dst addr */
                 rte_ether_addr_copy(&ports->neighbor_mac[dst_port], &eth_hdr->d_addr);
-                                
+
                 /* src addr */
                 rte_ether_addr_copy(&stats->ports_eth_addr[dst_port], &eth_hdr->s_addr);
 
-                meta->destination = dst_port;
                 stats->port_statistics[dst_port]++;
-                
-                meta->action = ONVM_NF_ACTION_OUT;
+                onvm_pkt_set_action(pkt, ONVM_NF_ACTION_OUT, dst_port);
         } else {
-                meta->action = ONVM_NF_ACTION_DROP;
+                onvm_pkt_set_action(pkt, ONVM_NF_ACTION_DROP, 0);
                 stats->packets_dropped++;
         }
         return 0;
@@ -221,18 +215,17 @@ l3fwd_initialize_ports(struct state_info *stats) {
         uint16_t i;
         for (i = 0; i < ports->num_ports; i++) {
                 rte_eth_macaddr_get(ports->id[i], &stats->ports_eth_addr[ports->id[i]]);
-                printf("Port %u, MAC address: %02X:%02X:%02X:%02X:%02X:%02X\n\n",
-                        ports->id[i],
-                        stats->ports_eth_addr[ports->id[i]].addr_bytes[0],
-                        stats->ports_eth_addr[ports->id[i]].addr_bytes[1],
-                        stats->ports_eth_addr[ports->id[i]].addr_bytes[2],
-                        stats->ports_eth_addr[ports->id[i]].addr_bytes[3],
-                        stats->ports_eth_addr[ports->id[i]].addr_bytes[4],
-                        stats->ports_eth_addr[ports->id[i]].addr_bytes[5]);
+                printf("Port %u, MAC address: %02X:%02X:%02X:%02X:%02X:%02X\n\n", ports->id[i],
+                       stats->ports_eth_addr[ports->id[i]].addr_bytes[0],
+                       stats->ports_eth_addr[ports->id[i]].addr_bytes[1],
+                       stats->ports_eth_addr[ports->id[i]].addr_bytes[2],
+                       stats->ports_eth_addr[ports->id[i]].addr_bytes[3],
+                       stats->ports_eth_addr[ports->id[i]].addr_bytes[4],
+                       stats->ports_eth_addr[ports->id[i]].addr_bytes[5]);
         }
 }
 
-/* 
+/*
  * This function pre-init dst MACs for all ports to 02:00:00:00:00:xx.
  * Destination mac addresses are saved in th dest_eth_addr array.
  */
@@ -240,8 +233,7 @@ static void
 l3fwd_initialize_dst(struct state_info *stats) {
         uint16_t i;
         for (i = 0; i < ports->num_ports; i++) {
-                stats->dest_eth_addr[ports->id[i]] =
-                        RTE_ETHER_LOCAL_ADMIN_ADDR + ((uint64_t)ports->id[i] << 40);
+                stats->dest_eth_addr[ports->id[i]] = RTE_ETHER_LOCAL_ADMIN_ADDR + ((uint64_t)ports->id[i] << 40);
                 *(uint64_t *)(stats->val_eth + ports->id[i]) = stats->dest_eth_addr[ports->id[i]];
         }
 }
@@ -269,17 +261,17 @@ nf_setup(struct onvm_nf_local_ctx *nf_local_ctx) {
          */
         if (stats->l3fwd_lpm_on) {
                 if (setup_lpm(stats) < 0) {
-                     onvm_nflib_stop(nf_local_ctx);
-                     rte_free(stats);
-                     rte_exit(EXIT_FAILURE, "Unable to setup LPM\n");
+                        onvm_nflib_stop(nf_local_ctx);
+                        rte_free(stats);
+                        rte_exit(EXIT_FAILURE, "Unable to setup LPM\n");
                 }
                 stats->hash_entry_number = HASH_ENTRY_NUMBER_DEFAULT;
                 printf("\nLongest prefix match enabled. \n");
         } else {
                 if (setup_hash(stats) < 0) {
-                     onvm_nflib_stop(nf_local_ctx);
-                     rte_free(stats);
-                     rte_exit(EXIT_FAILURE, "Unable to setup Hash\n");
+                        onvm_nflib_stop(nf_local_ctx);
+                        rte_free(stats);
+                        rte_exit(EXIT_FAILURE, "Unable to setup Hash\n");
                 }
                 printf("Hash table exact match enabled. \n");
                 printf("Hash entry number set to: %d\n", stats->hash_entry_number);
@@ -319,7 +311,7 @@ main(int argc, char *argv[]) {
          * and hash entry number.
          */
         struct onvm_nf *nf = nf_local_ctx->nf;
-        struct state_info *stats = rte_calloc("state", 1, sizeof(struct state_info), 0); // Will be freed my manager.
+        struct state_info *stats = rte_calloc("state", 1, sizeof(struct state_info), 0);  // Will be freed my manager.
         if (stats == NULL) {
                 onvm_nflib_stop(nf_local_ctx);
                 rte_exit(EXIT_FAILURE, "Unable to initialize NF stats.");
