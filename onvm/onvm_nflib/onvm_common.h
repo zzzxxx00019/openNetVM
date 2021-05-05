@@ -119,7 +119,8 @@ struct onvm_pkt_meta {
         uint8_t chain_index; /*index of the current step in the service chain*/
         uint8_t numNF;       /* Number of parallel NFs */
         bool has_mutex;
-        bool dispatcher;
+        volatile bool payload_read;
+        volatile bool payload_write;
 };
 
 static inline struct onvm_pkt_meta *

@@ -7,8 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/queue.h>
-#include <unistd.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #include <rte_common.h>
 #include <rte_cycles.h>
@@ -18,21 +18,17 @@
 #include "onvm_nflib.h"
 #include "onvm_pkt_helper.h"
 
+#define PKTMBUF_POOL_NAME "MProc_pktmbuf_pool"
 #define NF_TAG "parallel_fwd_1"
 
-/* number of package between each print */
 static uint32_t print_delay = 10000000;
-
-static uint32_t total_packets = 0;
 static uint64_t last_cycle;
 static uint64_t cur_cycles;
 
-/* shared data structure containing host port info */
+struct rte_mempool *pktmbuf_pool;
+
 extern struct port_info *ports;
 
-/*
- * Print a usage message
- */
 static void
 usage(const char *progname) {
         printf("Usage:\n");
@@ -42,9 +38,6 @@ usage(const char *progname) {
         printf(" - `-p <print_delay>`: number of packets between each print, e.g. `-p 1` prints every packets.\n");
 }
 
-/*
- * Parse the application arguments.
- */
 static int
 parse_app_args(int argc, char *argv[], const char *progname) {
         int c;
@@ -75,17 +68,28 @@ parse_app_args(int argc, char *argv[], const char *progname) {
 static int
 packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
-        total_packets++;
+        struct rte_mbuf *handle_pkt = NULL;
+        bool copy_flag = false;
 
-	(void) pkt;
+        // If packet has conflict, need to clone when handling
+        if (meta->payload_write) {
+                copy_flag = true;
+                struct rte_mbuf *handle_pkt = rte_pktmbuf_clone(pkt, pktmbuf_pool);
+                meta->payload_read = false;
+                if (!handle_pkt) {
+                        printf("Packet clone fail...");
+                        return 0;
+                }
+        } else {
+                handle_pkt = pkt;
+        }
+        // Handle the packet
+        onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, 5);
 
-	meta->action = ONVM_NF_ACTION_NEXT;
-	//meta->action = ONVM_NF_ACTION_TONF;
-	//meta->destination = 5;
-
-	//struct timeval delay = {.tv_sec = 0, .tv_usec = 50*1000} ;
-	//struct timeval delay = {.tv_sec = 0, .tv_usec = 0} ;
-	//select(0, NULL, NULL, NULL, &delay);
+        // If packet is be copied, need to free the memory
+        if (copy_flag == true) {
+                rte_pktmbuf_free(handle_pkt);
+        }
 
         return 0;
 }
@@ -123,6 +127,12 @@ main(int argc, char *argv[]) {
 
         cur_cycles = rte_get_tsc_cycles();
         last_cycle = rte_get_tsc_cycles();
+
+        pktmbuf_pool = rte_mempool_lookup(PKTMBUF_POOL_NAME);
+        if (pktmbuf_pool == NULL) {
+                onvm_nflib_stop(nf_local_ctx);
+                rte_exit(EXIT_FAILURE, "Cannot find mbuf pool!\n");
+        }
 
         onvm_nflib_run(nf_local_ctx);
 

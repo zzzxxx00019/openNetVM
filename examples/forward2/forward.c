@@ -7,33 +7,28 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/queue.h>
+#include <sys/wait.h>
 #include <unistd.h>
-#include <time.h>
 
 #include <rte_common.h>
 #include <rte_cycles.h>
 #include <rte_ip.h>
 #include <rte_mbuf.h>
-#include <rte_malloc.h>
 
 #include "onvm_nflib.h"
 #include "onvm_pkt_helper.h"
 
-#define NF_TAG "dispatch"
+#define NF_TAG "parallel_fwd_2"
 
 /* number of package between each print */
-static uint32_t print_delay = 1000000;
-const uint8_t arp_response = 2;
+static uint32_t print_delay = 10000000;
 
 static uint64_t last_cycle;
 static uint64_t cur_cycles;
 
 /* shared data structure containing host port info */
 extern struct port_info *ports;
-extern struct onvm_mutex *parallel_mutex ;
-/*
- * Print a usage message
- */
+
 static void
 usage(const char *progname) {
         printf("Usage:\n");
@@ -43,9 +38,6 @@ usage(const char *progname) {
         printf(" - `-p <print_delay>`: number of packets between each print, e.g. `-p 1` prints every packets.\n");
 }
 
-/*
- * Parse the application arguments.
- */
 static int
 parse_app_args(int argc, char *argv[], const char *progname) {
         int c;
@@ -76,23 +68,13 @@ parse_app_args(int argc, char *argv[], const char *progname) {
 static int
 packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
-       
-        if(!onvm_pkt_is_ipv4(pkt)) {
-            onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, arp_response);
-            return 0;
-        }
-        // When use parallel action, must initial dst to 0 before setting
-        uint8_t dst = 0;
-        // Destination 3 is payload read test NF, Set payload_read flag to 1
-        meta->payload_read = true;
-        dst |= (1 << 3);
-        // Destination 4 is payload write test NF, Set payload_write flag to 1
-        meta->payload_write = true;
-        dst |= (1 << 4);
-        // Destination 5 is l3fwd
-        dst |= (1 << 5);
         
-        onvm_pkt_set_action(pkt, ONVM_NF_ACTION_PARA, dst);
+        // If packet go parallel, check clone complete before handling
+        while(meta->payload_read);
+        meta->payload_write = false;
+
+        // Handle the packet
+        onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, 5);
 
         return 0;
 }
@@ -132,8 +114,8 @@ main(int argc, char *argv[]) {
         last_cycle = rte_get_tsc_cycles();
 
         onvm_nflib_run(nf_local_ctx);
-        onvm_nflib_stop(nf_local_ctx);
 
+        onvm_nflib_stop(nf_local_ctx);
         printf("If we reach here, program is ending\n");
         return 0;
 }
