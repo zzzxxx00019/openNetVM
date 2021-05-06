@@ -94,14 +94,16 @@ using std::ifstream;
 using std::string;
 using std::vector;
 
+#define PKTMBUF_POOL_NAME "MProc_pktmbuf_pool"
 #define NF_TAG "IPS"
 
 extern struct port_info *ports;
+struct rte_mempool *pktmbuf_pool;
 
 /* user defined settings */
 static uint32_t destination = (uint16_t)-1;
-//const char *patternFile = "rules/snort3-community.rules";
-const char *patternFile = "/home/itlab/openNetVM/hyperscan/ptn";
+const char *patternFile = "rules/snort3-sql.rules";
+//const char *patternFile = "/home/itlab/openNetVM/hyperscan/ptn";
 
 /* Hyperscan Module */
 hs_database_t *db_streaming;
@@ -206,40 +208,54 @@ parse_app_args(int argc, char *argv[], const char *progname) {
 static int
 packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
-        u_char *packet = rte_pktmbuf_mtod(pkt, u_char *);
-	cout << "Init Packet" << endl;
+        struct rte_mbuf *pkt_handler = NULL;
+	bool copy_flag = false;
+	
+	if (meta->payload_write) {
+		copy_flag = true;
+		pkt_handler = rte_pktmbuf_clone(pkt, pktmbuf_pool);
+
+		meta->payload_read = false;
+		if (!pkt_handler) {
+			printf("Clone Fail");
+			return 0;
+		}
+	} else {
+		pkt_handler = pkt;
+	}
+
+        u_char *packet = rte_pktmbuf_mtod(pkt_handler, u_char *);
         module->scanStreams(packet);
-	cout << "Scan" << endl;
-        // Drop
-        if (module->matches()) {
-                module->clearMatches();
-                meta->action = ONVM_NF_ACTION_DROP;
+
+	// Drop
+        if (module->matchSignal()) {
+		cout << "pktMatch: " << module->matches() << endl;
+                //meta->action = ONVM_NF_ACTION_DROP;
+		onvm_pkt_set_action(pkt, ONVM_NF_ACTION_DROP, 0);
                 return 0;
         }
-
+	// Pass
         if (destination != (uint16_t)-1) {
-                meta->action = ONVM_NF_ACTION_TONF;
-                meta->destination = destination;
+		onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, destination);
+                //meta->action = ONVM_NF_ACTION_TONF;
+                //meta->destination = destination;
         } else {
-                meta->action = ONVM_NF_ACTION_OUT;
-                meta->destination = pkt->port;
-
+                //meta->action = ONVM_NF_ACTION_OUT;
+                //meta->destination = pkt->port;
                 if (onvm_pkt_swap_src_mac_addr(pkt, meta->destination, ports) != 0) {
                         RTE_LOG(INFO, APP, "ERROR: Failed to swap src mac with dst mac!\n");
                 }
+		onvm_pkt_set_action(pkt, ONVM_NF_ACTION_OUT, pkt->port);
         }
+
+	if (copy_flag)
+		rte_pktmbuf_free(pkt_handler);
+
         return 0;
 }
 
 void
 nf_setup(__attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
-        // Read our pattern set in and build Hyperscan databases from it.
-        cout << "Pattern file: " << patternFile << endl;
-        databasesFromFile(patternFile, &db_streaming);
-	
-	// Setup Hyperscan engine
-	Hyperscan engine(db_streaming);
-	module = &engine;
 
         // Open Stream mode
        	module->openStreams();
@@ -279,10 +295,25 @@ main(int argc, char **argv) {
                 onvm_nflib_stop(nf_local_ctx);
                 rte_exit(EXIT_FAILURE, "Invalid command-line arguments\n");
         }
+	
+	pktmbuf_pool = rte_mempool_lookup(PKTMBUF_POOL_NAME);
+	
+	if (!pktmbuf_pool) {
+		onvm_nflib_stop(nf_local_ctx);
+		rte_exit(EXIT_FAILURE, "Cannot find mbuf pool!\n");
+	}
 
+        // Read our pattern set in and build Hyperscan databases from it.
+        cout << "Pattern file: " << patternFile << endl;
+        databasesFromFile(patternFile, &db_streaming);
+	
+	// Setup Hyperscan engine
+	Hyperscan engine(db_streaming);
+	module = &engine;
+	
         onvm_nflib_run(nf_local_ctx);
 
-        // Close Hyperscan databases
+        // Close Hyperscan engine
         module->closeStreams();
         hs_free_database(db_streaming);
 
@@ -365,7 +396,7 @@ main(int argc, char **argv) {
 
 static unsigned
 parseFlags(const string &flagsStr) {
-        unsigned flags = 0;
+        unsigned flags = HS_FLAG_PREFILTER;
         for (const auto &c : flagsStr) {
                 switch (c) {
                         case 'i':
@@ -375,7 +406,7 @@ parseFlags(const string &flagsStr) {
                                 flags |= HS_FLAG_MULTILINE;
                                 break;
                         case 's':
-                                flags |= HS_FLAG_DOTALL;
+                               	flags |= HS_FLAG_DOTALL;
                                 break;
                         case 'H':
                                 flags |= HS_FLAG_SINGLEMATCH;
@@ -393,7 +424,7 @@ parseFlags(const string &flagsStr) {
                                 break;
                         default:
                                 cerr << "Unsupported flag \'" << c << "\'" << endl;
-                                exit(-1);
+                                return 0;
                 }
         }
         return flags;
@@ -419,19 +450,20 @@ parseFile(const char *filename, vector<string> &patterns, vector<unsigned> &flag
                 // otherwise, it should be ID:PCRE, e.g.
                 //  10001:/foobar/is
 
-                size_t colonIdx = line.find_first_of(':');
-                if (colonIdx == string::npos) {
-                        cerr << "ERROR: Could not parse line " << i << endl;
-                        exit(-1);
-                }
+                size_t pcreStart = line.find("pcre:\"/");
+                if (pcreStart == string::npos)
+			continue;
+		size_t pcreEnd = line.find("\"", pcreStart + 6);
 
                 // we should have an unsigned int as an ID, before the colon
-                unsigned id = std::stoi(line.substr(0, colonIdx).c_str());
+                //unsigned id = std::stoi(line.substr(0, colonIdx).c_str());
+                unsigned id = i; // ID = Line number
 
                 // rest of the expression is the PCRE
-                const string expr(line.substr(colonIdx + 1));
-
+                const string expr(line.substr(pcreStart + 6, pcreEnd - pcreStart - 6));
+		cout << "pcre: " << expr << endl;
                 size_t flagsStart = expr.find_last_of('/');
+		
                 if (flagsStart == string::npos) {
                         cerr << "ERROR: no trailing '/' char" << endl;
                         exit(-1);
@@ -440,7 +472,8 @@ parseFile(const char *filename, vector<string> &patterns, vector<unsigned> &flag
                 string pcre(expr.substr(1, flagsStart - 1));
                 string flagsStr(expr.substr(flagsStart + 1, expr.size() - flagsStart));
                 unsigned flag = parseFlags(flagsStr);
-
+		if(!flag)
+			continue;
                 patterns.push_back(pcre);
                 flags.push_back(flag);
                 ids.push_back(id);

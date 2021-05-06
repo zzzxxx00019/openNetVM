@@ -1,6 +1,7 @@
 #include "hyperscan.h"
 
 #include <iostream>
+#include <string>
 
 // We use the BSD primitives throughout as they exist on both BSD and Linux.
 #define __FAVOR_BSD
@@ -18,6 +19,7 @@
 using std::cerr;
 using std::cout;
 using std::endl;
+using std::vector;
 
 // Helper function. See end of file.
 static bool
@@ -27,8 +29,8 @@ payloadOffset(const unsigned char *pkt_data, unsigned int *offset, unsigned int 
 static int
 onMatch(unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags, void *ctx) {
         // Our context points to a size_t storing the match count
-        size_t *matches = (size_t *)ctx;
-        (*matches)++;
+        bool *matches = (bool *)ctx;
+        (*matches) = true;
         return 0;  // continue matching
 }
 
@@ -73,7 +75,7 @@ Hyperscan::~Hyperscan() {
 
 void
 Hyperscan::openStreams() {
-        streams.resize(stream_map.size());
+        streams.resize(FLOW_NUMS);
         for (auto &stream : streams) {
                 hs_error_t err = hs_open_stream(db_streaming, 0, &stream);
                 if (err != HS_SUCCESS) {
@@ -97,16 +99,19 @@ Hyperscan::closeStreams() {
 void
 Hyperscan::scanStreams(const u_char *pktData) {
         unsigned int offset = 0, length = 0;
+	matchFlag = false;
         if (!payloadOffset(pktData, &offset, &length))
-                return;
+        	return;
         // Valid TCP or UDP packet
         const struct ip *iphdr = (const struct ip *)(pktData + sizeof(struct ether_header));
         const char *payload = (const char *)pktData + offset;
-
+	
         size_t id = stream_map.insert(std::make_pair(FiveTuple(iphdr), stream_map.size())).first->second;
-
-        hs_error_t err = hs_scan_stream(streams[id], payload, length, 0, scratch, onMatch, &matchCount);
-
+	if(id > FLOW_NUMS)
+		id %= FLOW_NUMS;
+        hs_error_t err = hs_scan_stream(streams[id], payload, length, 0, scratch, onMatch, &matchFlag);
+	if (matchFlag)
+		matchCount++;	
         if (err != HS_SUCCESS) {
                 cerr << "ERROR: Unable to scan packet. Exiting." << endl;
                 exit(-1);

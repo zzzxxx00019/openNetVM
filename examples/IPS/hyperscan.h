@@ -8,6 +8,8 @@
 
 #include <hs.h>
 
+#define FLOW_NUMS 10000
+
 using std::unordered_map;
 using std::vector;
 
@@ -74,10 +76,17 @@ class Hyperscan {
 
         // Count of matches found during scanning
         size_t matchCount;
+	
+	bool matchFlag;
 
        public:
         Hyperscan(const hs_database_t *streaming);
         ~Hyperscan();
+
+	bool
+	matchSignal() const {
+		return matchFlag;
+	}
 
         // Return the number of matches found.
         size_t
