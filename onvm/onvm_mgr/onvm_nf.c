@@ -47,9 +47,9 @@
 ******************************************************************************/
 
 #include "onvm_nf.h"
+#include <rte_lpm.h>
 #include "onvm_mgr.h"
 #include "onvm_stats.h"
-#include <rte_lpm.h>
 
 /* ID 0 is reserved */
 uint16_t next_instance_id = 1;
@@ -192,7 +192,7 @@ onvm_nf_check_status(void) {
                                 onvm_nf_init_lpm_region(req_lpm);
                                 break;
                         case MSG_REQUEST_FT:
-                                ft = (struct ft_request *) msg->msg_data;
+                                ft = (struct ft_request *)msg->msg_data;
                                 onvm_nf_init_ft(ft);
                                 break;
                         case MSG_NF_STARTING:
@@ -239,6 +239,37 @@ onvm_nf_send_msg(uint16_t dest, uint8_t msg_type, void *msg_data) {
         msg->msg_data = msg_data;
 
         return rte_ring_enqueue(nfs[dest].msg_q, (void *)msg);
+}
+
+void
+onvm_nf_scaling(void) {
+        uint64_t rx_for_service[MAX_SERVICES] = {0};
+        uint64_t tx_for_service[MAX_SERVICES] = {0};
+        uint8_t parent_for_service[MAX_SERVICES] = {0};
+
+        for (int i = 0; i < MAX_NFS; i++) {
+                if (!onvm_nf_is_valid(&nfs[i])) {
+                        continue;
+                }
+                if (!nfs[i].thread_info.parent) {
+                        parent_for_service[i] = i;
+                }
+                rx_for_service[nfs[i].service_id] += nfs[i].stats.rx;
+                tx_for_service[nfs[i].service_id] += nfs[i].stats.tx;
+        }
+
+        uint32_t high_threshold = 10000;
+
+        for (int i = 0; i < MAX_SERVICES; i++) {
+                uint16_t nfs_for_service = nf_per_service_count[i];
+                if (!nfs_for_service)
+                        continue;
+                if (rx_for_service[i] > high_threshold) {
+                        uint8_t parent_instance_ID = parent_for_service[i];
+                        struct onvm_nf_scale_info *scale_info = NULL;
+                        onvm_nf_send_msg(parent_instance_ID, MSG_SCALE, scale_info);
+                }
+        }
 }
 
 /******************************Internal functions*****************************/
@@ -370,8 +401,8 @@ onvm_nf_stop(struct onvm_nf *nf) {
                         rte_pktmbuf_free(pkts[i]);
         }
         nf_msg_pool = rte_mempool_lookup(_NF_MSG_POOL_NAME);
-        while (rte_ring_dequeue(nfs[nf_id].msg_q, (void**)(&msg)) == 0) {
-                rte_mempool_put(nf_msg_pool, (void*)msg);
+        while (rte_ring_dequeue(nfs[nf_id].msg_q, (void **)(&msg)) == 0) {
+                rte_mempool_put(nf_msg_pool, (void *)msg);
         }
 
         /* Free info struct */
@@ -380,7 +411,7 @@ onvm_nf_stop(struct onvm_nf *nf) {
         if (nf_info_mp == NULL)
                 return 1;
 
-        rte_mempool_put(nf_info_mp, (void*)nf);
+        rte_mempool_put(nf_info_mp, (void *)nf);
 
         /* Further cleanup is only required if NF was succesfully started */
         if (nf_status != NF_RUNNING && nf_status != NF_PAUSED)
@@ -429,7 +460,7 @@ onvm_nf_stop(struct onvm_nf *nf) {
 static void
 onvm_nf_init_lpm_region(struct lpm_request *req_lpm) {
         struct rte_lpm_config conf;
-        struct rte_lpm* lpm_region;
+        struct rte_lpm *lpm_region;
 
         conf.max_rules = req_lpm->max_num_rules;
         conf.number_tbl8s = req_lpm->num_tbl8s;
@@ -489,13 +520,9 @@ onvm_nf_init_rings(struct onvm_nf *nf) {
         rq_name = get_rx_queue_name(instance_id);
         tq_name = get_tx_queue_name(instance_id);
         msg_q_name = get_msg_queue_name(instance_id);
-        nf->rx_q =
-                rte_ring_create(rq_name, ringsize, socket_id, RING_F_SC_DEQ); /* multi prod, single cons */
-        nf->tx_q =
-                rte_ring_create(tq_name, ringsize, socket_id, RING_F_SC_DEQ); /* multi prod, single cons */
-        nf->msg_q =
-                rte_ring_create(msg_q_name, msgringsize, socket_id,
-                                RING_F_SC_DEQ); /* multi prod, single cons */
+        nf->rx_q = rte_ring_create(rq_name, ringsize, socket_id, RING_F_SC_DEQ);        /* multi prod, single cons */
+        nf->tx_q = rte_ring_create(tq_name, ringsize, socket_id, RING_F_SC_DEQ);        /* multi prod, single cons */
+        nf->msg_q = rte_ring_create(msg_q_name, msgringsize, socket_id, RING_F_SC_DEQ); /* multi prod, single cons */
 
         if (nf->rx_q == NULL)
                 rte_exit(EXIT_FAILURE, "Cannot create rx ring queue for NF %u\n", instance_id);

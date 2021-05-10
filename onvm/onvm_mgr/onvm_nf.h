@@ -82,4 +82,7 @@ onvm_nf_check_status(void);
 int
 onvm_nf_send_msg(uint16_t dest, uint8_t msg_type, void *msg_data);
 
+void
+onvm_nf_scaling(void);
+
 #endif  // _ONVM_NF_H_
