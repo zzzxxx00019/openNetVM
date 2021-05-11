@@ -246,16 +246,12 @@ onvm_nf_scaling(void) {
         uint32_t rx_buffer_for_service[MAX_SERVICES] = {0};
         uint32_t rx_buffer_count;
         uint8_t parent_for_service[MAX_SERVICES] = {0};
-        struct queue_mgr *tx_mgr;
-        struct packet_buf *nf_buf;
 
         for (int i = 0; i < MAX_NFS; i++) {
-                if (!onvm_nf_is_valid(&nfs[i])) {
+                if (!onvm_nf_is_valid(&nfs[i]))
                         continue;
-                }
-                tx_mgr = nfs[i].nf_tx_mgr;
-                nf_buf = &tx_mgr->nf_rx_bufs[i];
-                rx_buffer_count = nf_buf->count;
+
+                rx_buffer_count = rte_ring_count(nfs[i].rx_q);
 
                 if (!nfs[i].thread_info.parent) {
                         parent_for_service[i] = i;
