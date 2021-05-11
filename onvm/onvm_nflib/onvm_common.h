@@ -278,6 +278,7 @@ struct onvm_nf {
         struct queue_mgr *nf_tx_mgr;
         uint16_t instance_id;
         uint16_t service_id;
+        uint16_t idle_time;
         uint8_t status;
         char *tag;
         /* Pointer to NF defined state data */
@@ -287,6 +288,7 @@ struct onvm_nf {
                 uint16_t core;
                 /* Instance ID of parent NF or 0 */
                 uint16_t parent;
+                uint16_t nums_child;
                 rte_atomic16_t children_cnt;
         } thread_info;
 
@@ -321,6 +323,7 @@ struct onvm_nf {
                 volatile uint64_t act_drop;
                 volatile uint64_t act_next;
                 volatile uint64_t act_buffer;
+                volatile uint64_t act_cont;
         } stats;
 
         struct {

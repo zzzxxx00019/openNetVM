@@ -627,6 +627,10 @@ onvm_nflib_thread_main_loop(void *arg) {
                         printf("Packet limit exceeded, shutting down\n");
                         rte_atomic16_set(&nf_local_ctx->keep_running, 0);
                 }
+                if (!rte_atomic16_read(&nf_local_ctx->keep_running)) {
+                        printf("Terminate instance %d\n", nf->instance_id);
+                        break;
+                }
         }
         return NULL;
 }
@@ -689,7 +693,15 @@ onvm_nflib_handle_msg(struct onvm_nf_msg *msg, struct onvm_nf_local_ctx *nf_loca
                         break;
                 case MSG_SCALE:
                         RTE_LOG(INFO, APP, "Received scale message...\n");
-                        onvm_nflib_scale((struct onvm_nf_scale_info*)msg->msg_data);
+                        struct onvm_nf_scale_info *scale_info = (struct onvm_nf_scale_info*)msg->msg_data;
+                        if (scale_info) {
+                                onvm_nflib_scale(scale_info);
+                        } else {
+                                struct onvm_nf *nf = nf_local_ctx->nf;
+                                scale_info = onvm_nflib_get_empty_scaling_config(nf);
+                                scale_info->function_table = nf->function_table;
+                                onvm_nflib_scale(scale_info);
+                        }
                         break;
                 case MSG_FROM_NF:
                         RTE_LOG(INFO, APP, "Received MSG from other NF\n");
@@ -841,6 +853,7 @@ onvm_nflib_get_empty_scaling_config(struct onvm_nf *parent) {
                 RTE_LOG(ERR, APP, "Can't allocate scale info struct\n");
         }
         scale_info->nf_init_cfg = onvm_nflib_init_nf_init_cfg(parent->tag);
+        scale_info->nf_init_cfg->service_id = parent->service_id;
         scale_info->parent = parent;
 
         return scale_info;
@@ -1038,6 +1051,7 @@ onvm_nflib_start_child(void *arg) {
         child_context->nf = child;
         /* Save the parent id for future clean up */
         child->thread_info.parent = parent->instance_id;
+        parent->thread_info.nums_child += 1;
         /* Save the nf specifc function table */
         child->function_table = scale_info->function_table;
         /* Set nf state data */
@@ -1266,7 +1280,7 @@ onvm_nflib_cleanup(struct onvm_nf_local_ctx *nf_local_ctx) {
                 nf->nf_tx_mgr = NULL;
         }
 
-        if (nf->function_table) {
+        if (nf->function_table && !nf->thread_info.parent) {
                 free(nf->function_table);
                 nf->function_table = NULL;
         }
