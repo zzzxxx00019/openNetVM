@@ -74,7 +74,7 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
         // If packet has conflict, need to clone when handling
         if (meta->payload_write) {
                 copy_flag = true;
-                struct rte_mbuf *handle_pkt = rte_pktmbuf_clone(pkt, pktmbuf_pool);
+                handle_pkt = rte_pktmbuf_clone(pkt, pktmbuf_pool);
                 meta->payload_read = false;
                 if (!handle_pkt) {
                         printf("Packet clone fail...");

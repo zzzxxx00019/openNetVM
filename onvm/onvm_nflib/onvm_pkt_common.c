@@ -120,6 +120,7 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                         if (meta->numNF) {
                                 if (--meta->numNF) {
                                         sem_post(pkt_mutex);
+                                        nf->stats.act_cont++;
                                         continue;
                                 }
                         }
@@ -337,6 +338,7 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
                 if (meta->numNF) {
                         if (--meta->numNF) {
                                 sem_post(pkt_mutex);
+                                nf->stats.act_cont++;
                                 return;
                         }
                 }

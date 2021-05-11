@@ -57,6 +57,7 @@
 /****************************Internal Declarations****************************/
 
 #define MAX_SHUTDOWN_ITERS 10
+#define NF_SCALING 1
 
 // True as long as the main thread loop should keep running
 static uint8_t main_keep_running = 1;
@@ -121,6 +122,10 @@ master_thread_main(void) {
                                 printf("Packet limit exceeded, shutting down\n");
                                 main_keep_running = 0;
                         }
+                }
+
+                if (NF_SCALING) {
+                        onvm_nf_scaling();
                 }
         }
 

@@ -177,14 +177,18 @@ onvm_ft_fill_key_symmetric(struct onvm_ft_ipv4_5tuple *key, struct rte_mbuf *pkt
                 uint32_t temp = key->dst_addr;
                 key->dst_addr = key->src_addr;
                 key->src_addr = temp;
-        }
 
+                temp = key->dst_port;
+                key->dst_port = key->src_port;
+                key->src_port = temp ;
+        }
+        /*
         if (key->dst_port > key->src_port) {
                 uint16_t temp = key->dst_port;
                 key->dst_port = key->src_port;
                 key->src_port = temp;
         }
-
+        */
         return 0;
 }
 
