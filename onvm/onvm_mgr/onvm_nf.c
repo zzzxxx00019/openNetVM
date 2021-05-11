@@ -243,19 +243,33 @@ onvm_nf_send_msg(uint16_t dest, uint8_t msg_type, void *msg_data) {
 
 void
 onvm_nf_scaling(void) {
-        uint64_t rx_for_service[MAX_SERVICES] = {0};
-        uint64_t tx_for_service[MAX_SERVICES] = {0};
+        uint32_t rx_buffer_for_service[MAX_SERVICES] = {0};
+        uint32_t rx_buffer_count;
         uint8_t parent_for_service[MAX_SERVICES] = {0};
+        struct queue_mgr *tx_mgr;
+        struct packet_buf *nf_buf;
 
         for (int i = 0; i < MAX_NFS; i++) {
                 if (!onvm_nf_is_valid(&nfs[i])) {
                         continue;
                 }
+                tx_mgr = nfs[i].nf_tx_mgr;
+                nf_buf = &tx_mgr->nf_rx_bufs[i];
+                rx_buffer_count = nf_buf->count;
+
                 if (!nfs[i].thread_info.parent) {
                         parent_for_service[i] = i;
+                } else {
+                        if (nfs[i].idle_time == 10) {
+                                onvm_nf_send_msg(i, MSG_STOP, NULL);
+                        } else {
+                                if (rx_buffer_count == 0)
+                                        nfs[i].idle_time += 1;
+                                else
+                                        nfs[i].idle_time = 0;
+                        }
                 }
-                rx_for_service[nfs[i].service_id] += nfs[i].stats.rx;
-                tx_for_service[nfs[i].service_id] += nfs[i].stats.tx;
+                rx_buffer_for_service[nfs[i].service_id] += rx_buffer_count;
         }
 
         uint32_t high_threshold = 10000;
@@ -264,10 +278,13 @@ onvm_nf_scaling(void) {
                 uint16_t nfs_for_service = nf_per_service_count[i];
                 if (!nfs_for_service)
                         continue;
-                if (rx_for_service[i] > high_threshold) {
-                        uint8_t parent_instance_ID = parent_for_service[i];
-                        struct onvm_nf_scale_info *scale_info = NULL;
-                        onvm_nf_send_msg(parent_instance_ID, MSG_SCALE, scale_info);
+                printf("Service %d, buffer count = %d\n", i, rx_buffer_for_service[i]);
+                if (rx_buffer_for_service[i] > high_threshold && nfs[i].thread_info.nums_child < 1) {
+                        if (i == 2) {
+                                uint8_t parent_instance_ID = parent_for_service[i];
+                                struct onvm_nf_scale_info *scale_info = NULL;
+                                onvm_nf_send_msg(parent_instance_ID, MSG_SCALE, scale_info);
+                        }
                 }
         }
 }
