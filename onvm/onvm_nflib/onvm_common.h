@@ -288,7 +288,12 @@ struct onvm_nf {
                 uint16_t core;
                 /* Instance ID of parent NF or 0 */
                 uint16_t parent;
+                /* Child control variable */
                 uint16_t nums_child;
+                uint16_t sleep_instance[10];
+                uint16_t sleep_count;
+                bool sleep_flag;
+
                 rte_atomic16_t children_cnt;
         } thread_info;
 
@@ -314,6 +319,7 @@ struct onvm_nf {
         struct {
                 volatile uint64_t rx;
                 volatile uint64_t rx_drop;
+                volatile uint64_t rx_buffer;
                 volatile uint64_t tx;
                 volatile uint64_t tx_drop;
                 volatile uint64_t tx_buffer;

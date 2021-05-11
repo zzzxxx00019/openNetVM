@@ -244,43 +244,70 @@ onvm_nf_send_msg(uint16_t dest, uint8_t msg_type, void *msg_data) {
 void
 onvm_nf_scaling(void) {
         uint32_t rx_buffer_for_service[MAX_SERVICES] = {0};
-        uint32_t rx_buffer_count;
         uint8_t parent_for_service[MAX_SERVICES] = {0};
 
         for (int i = 0; i < MAX_NFS; i++) {
                 if (!onvm_nf_is_valid(&nfs[i]))
                         continue;
 
-                rx_buffer_count = rte_ring_count(nfs[i].rx_q);
-
-                if (!nfs[i].thread_info.parent) {
+                if (!nfs[i].thread_info.parent)
                         parent_for_service[i] = i;
-                } else {
-                        if (nfs[i].idle_time == 10) {
-                                onvm_nf_send_msg(i, MSG_STOP, NULL);
+                else {
+                        if (nfs[i].idle_time >= 100) {
+                                struct onvm_nf *parent_nf = &nfs[nfs[i].thread_info.parent];
+
+                                if (nfs[i].instance_id == parent_nf->thread_info.sleep_instance[0]) {
+                                        parent_nf->thread_info.sleep_count--;
+                                        for (int j = 1; j <= parent_nf->thread_info.sleep_count; j++) {
+                                                parent_nf->thread_info.sleep_instance[j - 1] =
+                                                    parent_nf->thread_info.sleep_instance[j];
+                                        }
+                                        onvm_nf_send_msg(i, MSG_STOP, NULL);
+                                } else {
+                                        printf("error might happend...\n");
+                                }
                         } else {
-                                if (rx_buffer_count == 0)
-                                        nfs[i].idle_time += 1;
+                                if (nfs[i].thread_info.sleep_flag)
+                                        nfs[i].idle_time++;
                                 else
                                         nfs[i].idle_time = 0;
                         }
                 }
-                rx_buffer_for_service[nfs[i].service_id] += rx_buffer_count;
+                rx_buffer_for_service[nfs[i].service_id] += rte_ring_count(nfs[i].rx_q);
         }
 
-        uint32_t high_threshold = 10000;
+        uint32_t high_threshold = 6000;
+        uint32_t low_threshold = 3000;
 
         for (int i = 0; i < MAX_SERVICES; i++) {
                 uint16_t nfs_for_service = nf_per_service_count[i];
                 if (!nfs_for_service)
                         continue;
-                printf("Service %d, buffer count = %d\n", i, rx_buffer_for_service[i]);
+
                 if (rx_buffer_for_service[i] > high_threshold && nfs[i].thread_info.nums_child < 1) {
                         if (i == 2) {
-                                uint8_t parent_instance_ID = parent_for_service[i];
-                                struct onvm_nf_scale_info *scale_info = NULL;
-                                onvm_nf_send_msg(parent_instance_ID, MSG_SCALE, scale_info);
+                                if (nfs[i].thread_info.sleep_count) {
+                                        printf("wake up sleep instance for service %d\n", i);
+                                        struct onvm_nf *parent_nf = &nfs[i];
+                                        uint32_t wake_instance =
+                                            parent_nf->thread_info.sleep_instance[--parent_nf->thread_info.sleep_count];
+                                        struct onvm_nf *wake_nf = &nfs[wake_instance];
+                                        wake_nf->thread_info.sleep_flag = false;
+                                        nf_per_service_count[i]++;
+                                } else {
+                                        printf("Send scaling msg to service %d\n", i);
+                                        uint8_t parent_instance_ID = parent_for_service[i];
+                                        struct onvm_nf_scale_info *scale_info = NULL;
+                                        onvm_nf_send_msg(parent_instance_ID, MSG_SCALE, scale_info);
+                                }
                         }
+                } else if (rx_buffer_for_service[i] < low_threshold && nfs[i].thread_info.nums_child > 0) {
+                        uint32_t sleep_instance = services[i][nfs_for_service - 1];
+                        struct onvm_nf *sleep_nf = &nfs[sleep_instance];
+                        struct onvm_nf *parent_nf = &nfs[i];
+                        nf_per_service_count[i]--;
+                        sleep_nf->thread_info.sleep_flag = true;
+                        parent_nf->thread_info.sleep_instance[parent_nf->thread_info.sleep_count++] = sleep_instance;
                 }
         }
 }
@@ -438,7 +465,9 @@ onvm_nf_stop(struct onvm_nf *nf) {
 
         /* Remove this NF from the service map.
          * Need to shift all elements past it in the array left to avoid gaps */
-        nf_per_service_count[service_id]--;
+        if (!nf->thread_info.sleep_flag)
+                nf_per_service_count[service_id]--;
+
         for (mapIndex = 0; mapIndex < MAX_NFS_PER_SERVICE; mapIndex++) {
                 if (services[service_id][mapIndex] == nf_id) {
                         break;
