@@ -36,7 +36,7 @@ struct ipv4_l3fwd_lpm_route {
 };
 
 static struct ipv4_l3fwd_lpm_route ipv4_l3fwd_lpm_route_array[] = {
-    {RTE_IPV4(192, 168, 10, 0), 24, 0}, {RTE_IPV4(192, 168, 20, 0), 24, 1}, {RTE_IPV4(3, 1, 1, 0), 24, 2},
+    {RTE_IPV4(192, 168, 1, 0), 24, 0}, {RTE_IPV4(192, 168, 2, 0), 24, 1}, {RTE_IPV4(3, 1, 1, 0), 24, 2},
     {RTE_IPV4(4, 1, 1, 0), 24, 3},      {RTE_IPV4(5, 1, 1, 0), 24, 4},      {RTE_IPV4(6, 1, 1, 0), 24, 5},
     {RTE_IPV4(7, 1, 1, 0), 24, 6},      {RTE_IPV4(8, 1, 1, 0), 24, 7},
 };
