@@ -292,7 +292,7 @@ struct onvm_nf {
                 uint16_t nums_child;
                 uint16_t sleep_instance[10];
                 uint16_t sleep_count;
-		uint16_t wait_counter;
+                uint16_t wait_counter;
                 bool sleep_flag;
 
                 rte_atomic16_t children_cnt;
