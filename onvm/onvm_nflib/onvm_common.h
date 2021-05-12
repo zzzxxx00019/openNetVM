@@ -67,7 +67,7 @@
 #define MAX_SERVICES 32          // total number of unique services allowed
 #define MAX_NFS_PER_SERVICE 32   // max number of NFs per service.
 
-#define NUM_MBUFS 32767          // total number of mbufs (2^15 - 1)
+#define NUM_MBUFS 65535          // total number of mbufs (2^15 - 1)
 #define NF_QUEUE_RINGSIZE 16384  // size of queue for NFs
 
 #define PACKET_READ_SIZE ((uint16_t)32)
@@ -292,6 +292,7 @@ struct onvm_nf {
                 uint16_t nums_child;
                 uint16_t sleep_instance[10];
                 uint16_t sleep_count;
+		uint16_t wait_counter;
                 bool sleep_flag;
 
                 rte_atomic16_t children_cnt;
