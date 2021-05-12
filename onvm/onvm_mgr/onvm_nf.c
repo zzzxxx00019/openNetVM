@@ -51,6 +51,9 @@
 #include "onvm_mgr.h"
 #include "onvm_stats.h"
 
+#define high_threshold 6000
+#define low_threshold  3000
+
 /* ID 0 is reserved */
 uint16_t next_instance_id = 1;
 uint16_t starting_instance_id = 1;
@@ -276,15 +279,12 @@ onvm_nf_scaling(void) {
                 rx_buffer_for_service[nfs[i].service_id] += rte_ring_count(nfs[i].rx_q);
         }
 
-        uint32_t high_threshold = 6000;
-        uint32_t low_threshold = 3000;
-
         for (int i = 0; i < MAX_SERVICES; i++) {
                 uint16_t nfs_for_service = nf_per_service_count[i];
                 if (!nfs_for_service)
                         continue;
 
-                if (rx_buffer_for_service[i] > high_threshold && nfs[i].thread_info.nums_child < 1) {
+                if (rx_buffer_for_service[i] > high_threshold) {
                         if (i == 2) {
                                 if (nfs[i].thread_info.sleep_count) {
                                         printf("wake up sleep instance for service %d\n", i);
@@ -294,11 +294,14 @@ onvm_nf_scaling(void) {
                                         struct onvm_nf *wake_nf = &nfs[wake_instance];
                                         wake_nf->thread_info.sleep_flag = false;
                                         nf_per_service_count[i]++;
-                                } else {
+                                } else if (nfs[i].thread_info.nums_child < 1) {
                                         printf("Send scaling msg to service %d\n", i);
                                         uint8_t parent_instance_ID = parent_for_service[i];
                                         struct onvm_nf_scale_info *scale_info = NULL;
                                         onvm_nf_send_msg(parent_instance_ID, MSG_SCALE, scale_info);
+                                } else {
+                                        printf("Do back pressure in the future\n");
+                                        /* Drop the packet which will enter this overloading service */
                                 }
                         }
                 } else if (rx_buffer_for_service[i] < low_threshold && nfs[i].thread_info.nums_child > 0) {
