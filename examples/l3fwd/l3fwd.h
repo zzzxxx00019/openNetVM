@@ -46,14 +46,14 @@
 /* Hash parameters. */
 #ifdef RTE_ARCH_64
 /* default to 4 million hash entries (approx) */
-#define L3FWD_HASH_ENTRIES              (1024*1024*4)
+#define L3FWD_HASH_ENTRIES (1024 * 1024 * 4)
 #else
 /* 32-bit has less address-space for hugepage memory, limit to 1M entries */
-#define L3FWD_HASH_ENTRIES              (1024*1024*1)
+#define L3FWD_HASH_ENTRIES (1024 * 1024 * 1)
 #endif
 
-#define HASH_ENTRY_NUMBER_DEFAULT       4
-#define NB_SOCKETS        8
+#define HASH_ENTRY_NUMBER_DEFAULT 4
+#define NB_SOCKETS 8
 
 /*Struct that holds all NF state information */
 struct state_info {
@@ -73,6 +73,9 @@ struct state_info {
 
 /* Function pointers for LPM or EM functionality. */
 
+struct rte_lpm *
+setup_lpm_request(void);
+
 int
 setup_lpm(struct state_info *stats);
 
@@ -88,4 +91,4 @@ em_get_ipv4_dst_port(struct rte_mbuf *pkt, struct state_info *stats);
 int
 get_initialized_ports(uint8_t if_out);
 
-#endif // __L3_SWICTH_H_
+#endif  // __L3_SWICTH_H_
