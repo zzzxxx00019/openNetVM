@@ -52,7 +52,8 @@
 #include "onvm_stats.h"
 
 #define high_threshold 6000
-#define low_threshold  3000
+#define low_threshold 3000
+#define Max_Child 1
 
 /* ID 0 is reserved */
 uint16_t next_instance_id = 1;
@@ -285,24 +286,22 @@ onvm_nf_scaling(void) {
                         continue;
 
                 if (rx_buffer_for_service[i] > high_threshold) {
-                        if (i == 2) {
-                                if (nfs[i].thread_info.sleep_count) {
-                                        printf("wake up sleep instance for service %d\n", i);
-                                        struct onvm_nf *parent_nf = &nfs[i];
-                                        uint32_t wake_instance =
-                                            parent_nf->thread_info.sleep_instance[--parent_nf->thread_info.sleep_count];
-                                        struct onvm_nf *wake_nf = &nfs[wake_instance];
-                                        wake_nf->thread_info.sleep_flag = false;
-                                        nf_per_service_count[i]++;
-                                } else if (nfs[i].thread_info.nums_child < 1) {
-                                        printf("Send scaling msg to service %d\n", i);
-                                        uint8_t parent_instance_ID = parent_for_service[i];
-                                        struct onvm_nf_scale_info *scale_info = NULL;
-                                        onvm_nf_send_msg(parent_instance_ID, MSG_SCALE, scale_info);
-                                } else {
-                                        printf("Do back pressure in the future\n");
-                                        /* Drop the packet which will enter this overloading service */
-                                }
+                        if (nfs[i].thread_info.sleep_count) {
+                                printf("wake up sleep instance for service %d\n", i);
+                                struct onvm_nf *parent_nf = &nfs[i];
+                                uint32_t wake_instance =
+                                    parent_nf->thread_info.sleep_instance[--parent_nf->thread_info.sleep_count];
+                                struct onvm_nf *wake_nf = &nfs[wake_instance];
+                                wake_nf->thread_info.sleep_flag = false;
+                                nf_per_service_count[i]++;
+                        } else if (nfs[i].thread_info.nums_child < Max_Child) {
+                                printf("Send scaling msg to service %d\n", i);
+                                uint8_t parent_instance_ID = parent_for_service[i];
+                                struct onvm_nf_scale_info *scale_info = NULL;
+                                onvm_nf_send_msg(parent_instance_ID, MSG_SCALE, scale_info);
+                        } else {
+                                printf("Do back pressure in the future\n");
+                                /* Drop the packet which will enter this overloading service */
                         }
                 } else if (rx_buffer_for_service[i] < low_threshold && nfs[i].thread_info.nums_child > 0) {
                         uint32_t sleep_instance = services[i][nfs_for_service - 1];
