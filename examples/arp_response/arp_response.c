@@ -360,19 +360,19 @@ main(int argc, char *argv[]) {
         argc -= arg_offset;
         argv += arg_offset;
 
-        ports->neighbor_mac[0].addr_bytes[0] = (uint8_t)strtol("08", NULL, 16);
-        ports->neighbor_mac[0].addr_bytes[1] = (uint8_t)strtol("00", NULL, 16);
-        ports->neighbor_mac[0].addr_bytes[2] = (uint8_t)strtol("27", NULL, 16);
-        ports->neighbor_mac[0].addr_bytes[3] = (uint8_t)strtol("9e", NULL, 16);
-        ports->neighbor_mac[0].addr_bytes[4] = (uint8_t)strtol("4f", NULL, 16);
-        ports->neighbor_mac[0].addr_bytes[5] = (uint8_t)strtol("79", NULL, 16);
+        ports->neighbor_mac[0].addr_bytes[0] = (uint8_t)strtol("a0", NULL, 16);
+        ports->neighbor_mac[0].addr_bytes[1] = (uint8_t)strtol("36", NULL, 16);
+        ports->neighbor_mac[0].addr_bytes[2] = (uint8_t)strtol("9f", NULL, 16);
+        ports->neighbor_mac[0].addr_bytes[3] = (uint8_t)strtol("21", NULL, 16);
+        ports->neighbor_mac[0].addr_bytes[4] = (uint8_t)strtol("64", NULL, 16);
+        ports->neighbor_mac[0].addr_bytes[5] = (uint8_t)strtol("b8", NULL, 16);
 
-        ports->neighbor_mac[1].addr_bytes[0] = (uint8_t)strtol("08", NULL, 16);
-        ports->neighbor_mac[1].addr_bytes[1] = (uint8_t)strtol("00", NULL, 16);
-        ports->neighbor_mac[1].addr_bytes[2] = (uint8_t)strtol("27", NULL, 16);
-        ports->neighbor_mac[1].addr_bytes[3] = (uint8_t)strtol("68", NULL, 16);
-        ports->neighbor_mac[1].addr_bytes[4] = (uint8_t)strtol("ce", NULL, 16);
-        ports->neighbor_mac[1].addr_bytes[5] = (uint8_t)strtol("7c", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[0] = (uint8_t)strtol("a0", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[1] = (uint8_t)strtol("36", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[2] = (uint8_t)strtol("9f", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[3] = (uint8_t)strtol("21", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[4] = (uint8_t)strtol("5a", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[5] = (uint8_t)strtol("ea", NULL, 16);
 
         state_info = rte_calloc("state", 1, sizeof(struct state_info), 0);
         if (state_info == NULL) {
