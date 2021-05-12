@@ -51,8 +51,8 @@
 #include "onvm_mgr.h"
 #include "onvm_stats.h"
 
-#define high_threshold 6000
-#define low_threshold 3000
+#define high_threshold 4000
+#define low_threshold 1000
 #define Max_Child 1
 
 /* ID 0 is reserved */
@@ -271,8 +271,10 @@ onvm_nf_scaling(void) {
                                         printf("error might happend...\n");
                                 }
                         } else {
-                                if (nfs[i].thread_info.sleep_flag)
+                                if (nfs[i].thread_info.sleep_flag) {
                                         nfs[i].idle_time++;
+					printf("instance %d idle for %d sec...\n", i, nfs[i].idle_time);
+				}
                                 else
                                         nfs[i].idle_time = 0;
                         }
@@ -283,12 +285,13 @@ onvm_nf_scaling(void) {
         for (int i = 0; i < MAX_SERVICES; i++) {
                 uint16_t nfs_for_service = nf_per_service_count[i];
                 if (!nfs_for_service)
-                        continue;
+                        continue;		
 
+		uint32_t parent_instance_ID = parent_for_service[i];
                 if (rx_buffer_for_service[i] > high_threshold) {
-                        if (nfs[i].thread_info.sleep_count) {
+                        if (nfs[parent_instance_ID].thread_info.sleep_count) {
                                 printf("wake up sleep instance for service %d\n", i);
-                                struct onvm_nf *parent_nf = &nfs[i];
+                                struct onvm_nf *parent_nf = &nfs[parent_instance_ID];
                                 uint32_t wake_instance =
                                     parent_nf->thread_info.sleep_instance[--parent_nf->thread_info.sleep_count];
                                 struct onvm_nf *wake_nf = &nfs[wake_instance];
@@ -296,17 +299,17 @@ onvm_nf_scaling(void) {
                                 nf_per_service_count[i]++;
                         } else if (nfs[i].thread_info.nums_child < Max_Child) {
                                 printf("Send scaling msg to service %d\n", i);
-                                uint8_t parent_instance_ID = parent_for_service[i];
+                                //uint8_t parent_instance_ID = parent_for_service[i];
                                 struct onvm_nf_scale_info *scale_info = NULL;
                                 onvm_nf_send_msg(parent_instance_ID, MSG_SCALE, scale_info);
                         } else {
                                 printf("Do back pressure in the future\n");
                                 /* Drop the packet which will enter this overloading service */
                         }
-                } else if (rx_buffer_for_service[i] < low_threshold && nfs[i].thread_info.nums_child > 0) {
+                } else if (rx_buffer_for_service[i] < low_threshold && nfs[i].thread_info.nums_child != nfs[i].thread_info.sleep_count) {
                         uint32_t sleep_instance = services[i][nfs_for_service - 1];
                         struct onvm_nf *sleep_nf = &nfs[sleep_instance];
-                        struct onvm_nf *parent_nf = &nfs[i];
+                        struct onvm_nf *parent_nf = &nfs[parent_instance_ID];
                         nf_per_service_count[i]--;
                         sleep_nf->thread_info.sleep_flag = true;
                         parent_nf->thread_info.sleep_instance[parent_nf->thread_info.sleep_count++] = sleep_instance;
