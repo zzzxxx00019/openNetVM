@@ -248,7 +248,7 @@ onvm_nf_send_msg(uint16_t dest, uint8_t msg_type, void *msg_data) {
 void
 onvm_nf_scaling(void) {
         uint32_t rx_buffer_for_service[MAX_SERVICES] = {0};
-        bool stop_wait_flag[MAX_SERVICES] = {0};
+        //bool stop_wait_flag[MAX_SERVICES] = {0};
 
         for (int i = 0; i < MAX_NFS; i++) {
                 if (!onvm_nf_is_valid(&nfs[i]))
@@ -264,7 +264,8 @@ onvm_nf_scaling(void) {
                                                 parent_nf->thread_info.sleep_instance[j - 1] =
                                                     parent_nf->thread_info.sleep_instance[j];
                                         }
-                                        stop_wait_flag[parent_nf->service_id] = true;
+                                        //stop_wait_flag[parent_nf->service_id] = true;
+					parent_nf->wait_flag = true;
                                         onvm_nf_send_msg(i, MSG_STOP, NULL);
                                 } else {
                                         printf("error might happend...\n");
@@ -302,9 +303,10 @@ onvm_nf_scaling(void) {
                                 struct onvm_nf *wake_nf = &nfs[wake_instance];
                                 wake_nf->thread_info.sleep_flag = false;
                                 nf_per_service_count[i]++;
-                        } else if (nfs[parent_instance_ID].thread_info.nums_child < Max_Child) {
+                        } else if (nfs[parent_instance_ID].thread_info.nums_child < Max_Child && nfs[parent_instance_ID].wait_flag == false) {
                                 printf("Send scaling msg to service %d with instance %d\n", i, parent_instance_ID);
                                 struct onvm_nf_scale_info *scale_info = NULL;
+				nfs[parent_instance_ID].wait_flag = true;
                                 onvm_nf_send_msg(parent_instance_ID, MSG_SCALE, scale_info);
                         } else {
                                 printf("Do back pressure in the future\n");
@@ -316,7 +318,7 @@ onvm_nf_scaling(void) {
                         if (nfs[parent_instance_ID].thread_info.wait_counter) {
                                 printf("Wating counter to terminate service %d\n", i);
                                 nfs[parent_instance_ID].thread_info.wait_counter--;
-                        } else if (!stop_wait_flag[i]) {
+                        } else if (!nfs[parent_instance_ID].wait_flag) {
                                 uint32_t sleep_instance = services[i][nfs_for_service - 1];
                                 struct onvm_nf *sleep_nf = &nfs[sleep_instance];
                                 struct onvm_nf *parent_nf = &nfs[parent_instance_ID];

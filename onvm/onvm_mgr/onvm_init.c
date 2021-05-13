@@ -57,6 +57,7 @@ struct core_status *cores = NULL;
 struct onvm_configuration *onvm_config = NULL;
 struct nf_wakeup_info *nf_wakeup_infos = NULL;
 
+struct rte_mempool *pktmbuf_clone_pool;
 struct rte_mempool *pktmbuf_pool;
 struct rte_mempool *nf_init_cfg_pool;
 struct rte_mempool *nf_msg_pool;
@@ -338,7 +339,9 @@ init_mbuf_pools(void) {
                                           sizeof(struct rte_pktmbuf_pool_private), rte_pktmbuf_pool_init, NULL,
                                           rte_pktmbuf_init, NULL, rte_socket_id(), NO_FLAGS);
 
-        return (pktmbuf_pool == NULL); /* 0  on success */
+	pktmbuf_clone_pool = rte_pktmbuf_pool_create(PKTMBUF_CLONE_POOL_NAME, NUM_MBUFS, MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+
+        return (pktmbuf_pool == NULL)|(pktmbuf_clone_pool == NULL); /* 0  on success */
 }
 
 /**
