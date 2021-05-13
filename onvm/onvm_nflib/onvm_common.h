@@ -283,6 +283,7 @@ struct onvm_nf {
         char *tag;
         /* Pointer to NF defined state data */
         void *data;
+        volatile bool wait_flag;
 
         struct {
                 uint16_t core;
@@ -292,6 +293,7 @@ struct onvm_nf {
                 uint16_t nums_child;
                 uint16_t sleep_instance[10];
                 uint16_t sleep_count;
+                uint16_t wait_counter;
                 bool sleep_flag;
 
                 rte_atomic16_t children_cnt;
@@ -395,6 +397,7 @@ struct ft_request {
 #define MP_NF_RXQ_NAME "MProc_Client_%u_RX"
 #define MP_NF_TXQ_NAME "MProc_Client_%u_TX"
 #define MP_CLIENT_SEM_NAME "MProc_Client_%u_SEM"
+#define PKTMBUF_CLONE_POOL_NAME "Mproc_pktmbuf_clone_pool"
 #define PKTMBUF_POOL_NAME "MProc_pktmbuf_pool"
 #define MZ_PORT_INFO "MProc_port_info"
 #define MZ_CORES_STATUS "MProc_cores_info"

@@ -74,7 +74,7 @@
 #define LOCAL_EXPERIMENTAL_ETHER 0x88B5
 #define DEFAULT_PKT_NUM 128
 #define MAX_PKT_NUM NF_QUEUE_RINGSIZE
-#define DEFAULT_NUM_CHILDREN 3
+#define DEFAULT_NUM_CHILDREN 0
 
 static uint16_t destination;
 static uint16_t num_children = DEFAULT_NUM_CHILDREN;
@@ -562,12 +562,12 @@ run_advanced_rings(int argc, char *argv[]) {
         ports->neighbor_mac[0].addr_bytes[4] = (uint8_t) strtol("64", NULL, 16);
         ports->neighbor_mac[0].addr_bytes[5] = (uint8_t) strtol("b8", NULL, 16);
 
-        ports->neighbor_mac[1].addr_bytes[0] = (uint8_t) strtol("f4", NULL, 16);
-        ports->neighbor_mac[1].addr_bytes[1] = (uint8_t) strtol("28", NULL, 16);
-        ports->neighbor_mac[1].addr_bytes[2] = (uint8_t) strtol("53", NULL, 16);
-        ports->neighbor_mac[1].addr_bytes[3] = (uint8_t) strtol("1c", NULL, 16);
-        ports->neighbor_mac[1].addr_bytes[4] = (uint8_t) strtol("50", NULL, 16);
-        ports->neighbor_mac[1].addr_bytes[5] = (uint8_t) strtol("0b", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[0] = (uint8_t) strtol("a0", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[1] = (uint8_t) strtol("36", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[2] = (uint8_t) strtol("9f", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[3] = (uint8_t) strtol("21", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[4] = (uint8_t) strtol("5a", NULL, 16);
+        ports->neighbor_mac[1].addr_bytes[5] = (uint8_t) strtol("ea", NULL, 16);
         
         for (i = 0; i < num_children; i++) {
                 struct onvm_nf_init_cfg *child_cfg;

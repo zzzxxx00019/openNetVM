@@ -3,66 +3,105 @@
 #include <iostream>
 #include <string>
 
-// We use the BSD primitives throughout as they exist on both BSD and Linux.
-#define __FAVOR_BSD
-#include <arpa/inet.h>
-#include <net/ethernet.h>
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/ip.h>
-#include <netinet/ip_icmp.h>
-#include <netinet/tcp.h>
-#include <netinet/udp.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <rte_byteorder.h>
+#include <rte_common.h>
+#include <rte_ethdev.h>
+#include <rte_ether.h>
+#include <rte_icmp.h>
+#include <rte_ip.h>
+#include <rte_mbuf.h>
+#include <rte_tcp.h>
+#include <rte_udp.h>
+
+#include "onvm_nflib.h"
+#include "onvm_pkt_helper.h"
+
+#ifdef __cplusplus
+}
+#endif
 
 #include <hs.h>
 
 using std::cerr;
 using std::cout;
 using std::endl;
-using std::vector;
+using std::string;
 
-// Helper function. See end of file.
-static bool
-payloadOffset(const unsigned char *pkt_data, unsigned int *offset, unsigned int *length);
+extern unordered_map<string, vector<string>> alert_msg;
 
 // Match event handler: called every time Hyperscan finds a match.
 static int
-onMatch(unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags, void *ctx) {
+onTcpMatch(unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags, void *ctx) {
         // Our context points to a size_t storing the match count
         bool *matches = (bool *)ctx;
         (*matches) = true;
+        cout << alert_msg["tcp"][id] << endl;
+        return 0;  // continue matching
+}
+static int
+onUdpMatch(unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags, void *ctx) {
+        // Our context points to a size_t storing the match count
+        bool *matches = (bool *)ctx;
+        (*matches) = true;
+        cout << alert_msg["udp"][id] << endl;
+        return 0;  // continue matching
+}
+static int
+onIcmpMatch(unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags, void *ctx) {
+        // Our context points to a size_t storing the match count
+        bool *matches = (bool *)ctx;
+        (*matches) = true;
+        cout << alert_msg["icmp"][id] << endl;
         return 0;  // continue matching
 }
 
-FiveTuple::FiveTuple(const struct ip *iphdr) {
+template <typename T>  // Since T is written with C, so i call it typename
+KeyTuple::KeyTuple(const struct rte_ipv4_hdr *iphdr, const T *hdr) {
         // IP fields
-        protocol = iphdr->ip_p;
-        srcAddr = iphdr->ip_src.s_addr;
-        dstAddr = iphdr->ip_dst.s_addr;
+        srcAddr = iphdr->src_addr;
+        dstAddr = iphdr->dst_addr;
 
         // UDP/TCP ports
-        const struct udphdr *uh = (const struct udphdr *)(((const char *)iphdr) + (iphdr->ip_hl * 4));
-        srcPort = uh->uh_sport;
-        dstPort = uh->uh_dport;
+        srcPort = hdr->src_port;
+        dstPort = hdr->dst_port;
 }
 
 bool
-FiveTuple::operator==(const FiveTuple &a) const {
-        return protocol == a.protocol && srcAddr == a.srcAddr && srcPort == a.srcPort && dstAddr == a.dstAddr &&
-               dstPort == a.dstPort;
+KeyTuple::operator==(const KeyTuple &a) const {
+        return srcAddr == a.srcAddr && srcPort == a.srcPort && dstAddr == a.dstAddr && dstPort == a.dstPort;
 }
 
 size_t
-FiveTupleHash::operator()(const FiveTuple &x) const {
-        return x.srcAddr ^ x.dstAddr ^ x.protocol ^ x.srcPort ^ x.dstPort;
+KeyTupleHash::operator()(const KeyTuple &x) const {
+        return x.srcAddr ^ x.dstAddr ^ x.srcPort ^ x.dstPort;
 }
 
-Hyperscan::Hyperscan(const hs_database_t *streaming) : db_streaming(streaming), scratch(nullptr), matchCount(0) {
+Hyperscan::Hyperscan(const hs_database_t *db_tcp, const hs_database_t *db_udp, const hs_database_t *db_icmp,
+                     const hs_database_t *db_ip)
+    : db_tcp(db_tcp),
+      db_udp(db_udp),
+      db_icmp(db_icmp),
+      db_ip(db_ip),
+      scratch(nullptr),
+      matchCount(0),
+      matchFlag(false) {
         // Allocate enough scratch space to handle either streaming or block
         // mode, so we only need the one scratch region.
-        hs_error_t err = hs_alloc_scratch(db_streaming, &scratch);
+        hs_error_t err;
+        if (db_tcp)
+                err = hs_alloc_scratch(db_tcp, &scratch);
+        if (db_udp)
+                err = hs_alloc_scratch(db_udp, &scratch);
+        if (db_icmp)
+                err = hs_alloc_scratch(db_icmp, &scratch);
+        if (db_ip)
+                err = hs_alloc_scratch(db_ip, &scratch);
         if (err != HS_SUCCESS) {
-		cout << err << endl;
+                cout << err << endl;
                 cerr << "ERROR: could not allocate scratch space. Exiting." << endl;
                 exit(-1);
         }
@@ -74,21 +113,45 @@ Hyperscan::~Hyperscan() {
 }
 
 void
-Hyperscan::openStreams() {
-        streams.resize(FLOW_NUMS);
-        for (auto &stream : streams) {
-                hs_error_t err = hs_open_stream(db_streaming, 0, &stream);
-                if (err != HS_SUCCESS) {
-                        cerr << "ERROR: Unable to open stream. Exiting." << endl;
-                        exit(-1);
+Hyperscan::initModule() {
+        if (db_tcp) {
+                tcp_streams.resize(TCP_FLOW_NUMS);
+                for (auto &stream : tcp_streams) {
+                        hs_error_t err = hs_open_stream(db_tcp, 0, &stream);
+                        if (err != HS_SUCCESS) {
+                                cerr << "ERROR: Unable to open tcp_stream. Exiting." << endl;
+                                exit(-1);
+                        }
                 }
+        }
+        if (db_udp) {
+                udp_streams.resize(UDP_FLOW_NUMS);
+                for (auto &stream : udp_streams) {
+                        hs_error_t err = hs_open_stream(db_udp, 0, &stream);
+                        if (err != HS_SUCCESS) {
+                                cerr << "ERROR: Unable to open udp_stream. Exiting." << endl;
+                                exit(-1);
+                        }
+                }
+        }
+        hs_error_t err = hs_open_stream(db_icmp, 0, &icmp_block);
+        if (err != HS_SUCCESS) {
+                cerr << "ERROR: Unable to open udp_stream. Exiting." << endl;
+                exit(-1);
         }
 }
 
 void
-Hyperscan::closeStreams() {
-        for (auto &stream : streams) {
-                hs_error_t err = hs_close_stream(stream, scratch, onMatch, &matchCount);
+Hyperscan::closeModule() {
+        for (auto &stream : tcp_streams) {
+                hs_error_t err = hs_close_stream(stream, scratch, onTcpMatch, &matchCount);
+                if (err != HS_SUCCESS) {
+                        cerr << "ERROR: Unable to close stream. Exiting." << endl;
+                        exit(-1);
+                }
+        }
+        for (auto &stream : udp_streams) {
+                hs_error_t err = hs_close_stream(stream, scratch, onUdpMatch, &matchCount);
                 if (err != HS_SUCCESS) {
                         cerr << "ERROR: Unable to close stream. Exiting." << endl;
                         exit(-1);
@@ -97,23 +160,78 @@ Hyperscan::closeStreams() {
 }
 
 void
-Hyperscan::scanStreams(const u_char *pktData) {
-        unsigned int offset = 0, length = 0;
-	matchFlag = false;
-        if (!payloadOffset(pktData, &offset, &length))
-        	return;
-        // Valid TCP or UDP packet
-        const struct ip *iphdr = (const struct ip *)(pktData + sizeof(struct ether_header));
-        const char *payload = (const char *)pktData + offset;
-	
-        size_t id = stream_map.insert(std::make_pair(FiveTuple(iphdr), stream_map.size())).first->second;
-	if(id > FLOW_NUMS)
-		id %= FLOW_NUMS;
-        hs_error_t err = hs_scan_stream(streams[id], payload, length, 0, scratch, onMatch, &matchFlag);
-	if (matchFlag)
-		matchCount++;	
+Hyperscan::scanModule(struct rte_mbuf *pkt) {
+        struct rte_ipv4_hdr *ipv4 = onvm_pkt_ipv4_hdr(pkt);
+        if (ipv4) {
+                matchFlag = false;
+                if (ipv4->next_proto_id == IP_PROTOCOL_TCP && db_tcp) {
+                        scanTcpStream(pkt);
+                } else if (ipv4->next_proto_id == IP_PROTOCOL_UDP && db_udp) {
+                        scanUdpStream(pkt);
+                } else if (ipv4->next_proto_id == IP_PROTOCOL_ICMP && db_icmp) {
+                        scanIcmpBlock(pkt);
+                }
+                if (matchFlag)
+                        matchCount++;
+        }
+}
+
+// TCP, UDP
+void
+Hyperscan::scanTcpStream(const struct rte_mbuf *pkt) {
+        const struct rte_ipv4_hdr *ipv4 =
+            (struct rte_ipv4_hdr *)(rte_pktmbuf_mtod(pkt, uint8_t *) + sizeof(struct rte_ether_hdr));
+        const struct rte_tcp_hdr *tcp =
+            (struct rte_tcp_hdr *)(rte_pktmbuf_mtod(pkt, uint8_t *) + sizeof(struct rte_ether_hdr) +
+                                   sizeof(struct rte_ipv4_hdr));
+        const char *payload = rte_pktmbuf_mtod(pkt, char *) + sizeof(struct rte_ether_hdr) +
+                              sizeof(struct rte_ipv4_hdr) + sizeof(rte_tcp_hdr);
+
+        const size_t length = rte_be_to_cpu_16(ipv4->total_length) - sizeof(struct rte_ipv4_hdr) - sizeof(rte_tcp_hdr);
+        size_t id = tcp_stream_map.insert(std::make_pair(KeyTuple(ipv4, tcp), tcp_stream_map.size())).first->second;
+        if (id > TCP_FLOW_NUMS)
+                id %= TCP_FLOW_NUMS;
+        hs_error_t err = hs_scan_stream(tcp_streams[id], payload, length, 0, scratch, onTcpMatch, &matchFlag);
         if (err != HS_SUCCESS) {
-                cerr << "ERROR: Unable to scan packet. Exiting." << endl;
+                cerr << "ERROR: Unable to scan tcp packet. Exiting." << endl;
+                exit(-1);
+        }
+}
+void
+Hyperscan::scanUdpStream(const struct rte_mbuf *pkt) {
+        const struct rte_ipv4_hdr *ipv4 =
+            (struct rte_ipv4_hdr *)(rte_pktmbuf_mtod(pkt, uint8_t *) + sizeof(struct rte_ether_hdr));
+        const struct rte_udp_hdr *udp =
+            (struct rte_udp_hdr *)(rte_pktmbuf_mtod(pkt, uint8_t *) + sizeof(struct rte_ether_hdr) +
+                                   sizeof(struct rte_ipv4_hdr));
+        const char *payload = rte_pktmbuf_mtod(pkt, char *) + sizeof(struct rte_ether_hdr) +
+                              sizeof(struct rte_ipv4_hdr) + sizeof(rte_udp_hdr);
+
+        const size_t length = rte_be_to_cpu_16(ipv4->total_length) - sizeof(rte_ipv4_hdr) - sizeof(rte_udp_hdr);
+        size_t id = udp_stream_map.insert(std::make_pair(KeyTuple(ipv4, udp), udp_stream_map.size())).first->second;
+        if (id > UDP_FLOW_NUMS)
+                id %= UDP_FLOW_NUMS;
+        hs_error_t err = hs_scan_stream(udp_streams[id], payload, length, 0, scratch, onUdpMatch, &matchFlag);
+        if (err != HS_SUCCESS) {
+                cerr << "ERROR: Unable to scan udp packet. Exiting." << endl;
+                exit(-1);
+        }
+}
+void
+Hyperscan::scanIcmpBlock(const struct rte_mbuf *pkt) {
+        const struct rte_ipv4_hdr *ipv4 =
+            (struct rte_ipv4_hdr *)(rte_pktmbuf_mtod(pkt, uint8_t *) + sizeof(struct rte_ether_hdr));
+        const struct rte_icmp_hdr *icmp =
+            (struct rte_icmp_hdr *)(rte_pktmbuf_mtod(pkt, uint8_t *) + sizeof(struct rte_ether_hdr) +
+                                    sizeof(struct rte_ipv4_hdr));
+        const char *payload = rte_pktmbuf_mtod(pkt, char *) + sizeof(struct rte_ether_hdr) +
+                              sizeof(struct rte_ipv4_hdr) + sizeof(rte_icmp_hdr);
+        // const size_t length = strlen(payload);
+        const size_t length = rte_be_to_cpu_16(ipv4->total_length) - sizeof(rte_ipv4_hdr) - sizeof(rte_icmp_hdr);
+
+        hs_error_t err = hs_scan_stream(icmp_block, payload, length, 0, scratch, onIcmpMatch, &matchFlag);
+        if (err != HS_SUCCESS) {
+                cerr << "ERROR: Unable to scan icmp packet. Exiting." << endl;
                 exit(-1);
         }
 }
@@ -127,7 +245,8 @@ Hyperscan::displayStats() {
                 size_t numBytes = bytes();
                 hs_error_t err;
 
-                cout << numPackets << " packets in " << numStreams << " streams, totalling " << numBytes << " bytes."
+                cout << numPackets << " packets in " << numStreams << " streams, totalling " << numBytes << "
+           bytes."
                      << endl;
                 cout << "Average packet length: " << numBytes / numPackets << " bytes." << endl;
                 cout << "Average stream length: " << numBytes / numStreams << " bytes." << endl;
@@ -136,68 +255,25 @@ Hyperscan::displayStats() {
                 size_t dbStream_size = 0;
                 err = hs_database_size(db_streaming, &dbStream_size);
                 if (err == HS_SUCCESS) {
-                        cout << "Streaming mode Hyperscan database size    : " << dbStream_size << " bytes." << endl;
-                } else {
-                        cout << "Error getting streaming mode Hyperscan database size" << endl;
+                        cout << "Streaming mode Hyperscan database size    : " << dbStream_size << " bytes." <<
+           endl; } else { cout << "Error getting streaming mode Hyperscan database size" << endl;
                 }
 
                 size_t dbBlock_size = 0;
                 err = hs_database_size(db_block, &dbBlock_size);
                 if (err == HS_SUCCESS) {
-                        cout << "Block mode Hyperscan database size        : " << dbBlock_size << " bytes." << endl;
-                } else {
-                        cout << "Error getting block mode Hyperscan database size" << endl;
+                        cout << "Block mode Hyperscan database size        : " << dbBlock_size << " bytes." <<
+           endl; } else { cout << "Error getting block mode Hyperscan database size" << endl;
                 }
 
                 size_t stream_size = 0;
                 err = hs_stream_size(db_streaming, &stream_size);
                 if (err == HS_SUCCESS) {
-                        cout << "Streaming mode Hyperscan stream state size: " << stream_size << " bytes (per stream)."
+                        cout << "Streaming mode Hyperscan stream state size: " << stream_size << " bytes (per
+           stream)."
                              << endl;
                 } else {
                         cout << "Error getting stream state size" << endl;
                 }
         */
-}
-
-/**
- * Helper function to locate the offset of the first byte of the payload in the
- * given ethernet frame. Offset into the packet, and the length of the payload
- * are returned in the arguments @a offset and @a length.
- */
-static bool
-payloadOffset(const unsigned char *pkt_data, unsigned int *offset, unsigned int *length) {
-        const ip *iph = (const ip *)(pkt_data + sizeof(ether_header));
-        const tcphdr *th = nullptr;
-
-        // Ignore packets that aren't IPv4
-        if (iph->ip_v != 4) {
-                return false;
-        }
-
-        // Ignore fragmented packets.
-        if (iph->ip_off & htons(IP_MF | IP_OFFMASK)) {
-                return false;
-        }
-
-        // IP header length, and transport header length.
-        unsigned int ihlen = iph->ip_hl * 4;
-        unsigned int thlen = 0;
-
-        switch (iph->ip_p) {
-                case IPPROTO_TCP:
-                        th = (const tcphdr *)((const char *)iph + ihlen);
-                        thlen = th->th_off * 4;
-                        break;
-                case IPPROTO_UDP:
-                        thlen = sizeof(udphdr);
-                        break;
-                default:
-                        return false;
-        }
-
-        *offset = sizeof(ether_header) + ihlen + thlen;
-        *length = sizeof(ether_header) + ntohs(iph->ip_len) - *offset;
-
-        return *length != 0;
 }

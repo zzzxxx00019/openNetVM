@@ -3,37 +3,40 @@
 #define HYPERSCAN_CLASS_H
 
 #include <chrono>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
 #include <hs.h>
 
-#define FLOW_NUMS 10000
+#define TCP_FLOW_NUMS 10000
+#define UDP_FLOW_NUMS 10000
+#define IP_PROTOCOL_ICMP 0x01
 
 using std::unordered_map;
 using std::vector;
 
 // Key for identifying a stream in our pcap input data, using data from its IP
 // headers.
-struct FiveTuple {
-        unsigned int protocol;
+struct KeyTuple {
         unsigned int srcAddr;
         unsigned int srcPort;
         unsigned int dstAddr;
         unsigned int dstPort;
 
-        // Construct a FiveTuple from a TCP or UDP packet.
-        FiveTuple(const struct ip *iphdr);
+        // Construct a KeyTuple from a TCP or UDP packet.
+        template <class T>
+        KeyTuple(const struct rte_ipv4_hdr *iphdr, const T *hdr);
 
         bool
-        operator==(const FiveTuple &a) const;
+        operator==(const KeyTuple &a) const;
 };
 
 // A *very* simple hash function, used when we create an unordered_map of
-// FiveTuple objects.
-struct FiveTupleHash {
+// KeyTuple objects.
+struct KeyTupleHash {
         size_t
-        operator()(const FiveTuple &x) const;
+        operator()(const KeyTuple &x) const;
 };
 
 // Simple timing class
@@ -63,30 +66,36 @@ class Clock {
 class Hyperscan {
        private:
         // Map used to construct stream_ids
-        unordered_map<FiveTuple, size_t, FiveTupleHash> stream_map;
+        unordered_map<KeyTuple, size_t, KeyTupleHash> tcp_stream_map;
+        unordered_map<KeyTuple, size_t, KeyTupleHash> udp_stream_map;
 
         // Hyperscan compiled database (streaming mode)
-        const hs_database_t *db_streaming;
+        const hs_database_t *db_tcp;
+        const hs_database_t *db_udp;
+        const hs_database_t *db_icmp;
+        const hs_database_t *db_ip;
 
         // Hyperscan temporary scratch space (used in both modes)
         hs_scratch_t *scratch;
 
         // Vector of Hyperscan stream state (used in streaming mode)
-        vector<hs_stream_t *> streams;
+        vector<hs_stream_t *> tcp_streams;
+        vector<hs_stream_t *> udp_streams;
+        hs_stream_t *icmp_block;
 
         // Count of matches found during scanning
         size_t matchCount;
-	
-	bool matchFlag;
+        bool matchFlag;
 
        public:
-        Hyperscan(const hs_database_t *streaming);
+        Hyperscan(const hs_database_t *db_tcp, const hs_database_t *db_udp, const hs_database_t *db_icmp,
+                  const hs_database_t *db_ip);
         ~Hyperscan();
 
-	bool
-	matchSignal() const {
-		return matchFlag;
-	}
+        bool
+        matchSignal() const {
+                return matchFlag;
+        }
 
         // Return the number of matches found.
         size_t
@@ -102,17 +111,26 @@ class Hyperscan {
 
         // Open a Hyperscan stream for each stream in stream_ids
         void
-        openStreams();
+        initModule();
 
         // Close all open Hyperscan streams (potentially generating any
         // end-anchored matches)
         void
-        closeStreams();
+        closeModule();
 
         // Scan each packet (in the ordering given in the PCAP file) through
         // Hyperscan using the streaming interface.
         void
-        scanStreams(const u_char *pktData);
+        scanModule(struct rte_mbuf *pkt);
+
+        void
+        scanTcpStream(const struct rte_mbuf *pkt);
+
+        void
+        scanUdpStream(const struct rte_mbuf *pkt);
+
+        void
+        scanIcmpBlock(const struct rte_mbuf *pkt);
 
         // Display some information about the compiled database and scanned data.
         void

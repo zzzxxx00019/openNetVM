@@ -57,7 +57,7 @@
 /****************************Internal Declarations****************************/
 
 #define MAX_SHUTDOWN_ITERS 10
-#define NF_SCALING 0
+#define NF_SCALING 1
 
 // True as long as the main thread loop should keep running
 static uint8_t main_keep_running = 1;
@@ -197,6 +197,10 @@ master_thread_main(void) {
                 if (sem_unlink(mutex_name[i])) {
                         RTE_LOG(INFO, APP, "Binary semaphore destroy fail...\n");
                 }
+        }
+        struct rte_mempool *pktmbuf_clone_pool = rte_mempool_lookup(PKTMBUF_CLONE_POOL_NAME);
+        if (pktmbuf_clone_pool) {
+                rte_mempool_free(pktmbuf_clone_pool);
         }
 }
 

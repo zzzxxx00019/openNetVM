@@ -62,6 +62,13 @@
 
 #define NF_TAG "l3switch"
 
+uint32_t hash_entry_number = HASH_ENTRY_NUMBER_DEFAULT;
+uint32_t print_delay = 1000000;
+int8_t l3fwd_lpm_on = 1;
+int8_t l3fwd_em_on = 0;
+
+struct rte_lpm *lpm_tbl;
+
 /* Print a usage message. */
 static void
 usage(const char *progname) {
@@ -76,20 +83,20 @@ usage(const char *progname) {
 
 /* Parse the application arguments. */
 static int
-parse_app_args(int argc, char *argv[], const char *progname, struct state_info *stats) {
+parse_app_args(int argc, char *argv[], const char *progname) {
         int c;
 
         while ((c = getopt(argc, argv, "h:p:e")) != -1) {
                 switch (c) {
                         case 'h':
-                                stats->hash_entry_number = strtoul(optarg, NULL, 10);
+                                hash_entry_number = strtoul(optarg, NULL, 10);
                                 break;
                         case 'p':
-                                stats->print_delay = strtoul(optarg, NULL, 10);
+                                print_delay = strtoul(optarg, NULL, 10);
                                 break;
                         case 'e':
-                                stats->l3fwd_lpm_on = 0;
-                                stats->l3fwd_em_on = 1;
+                                l3fwd_lpm_on = 0;
+                                l3fwd_em_on = 1;
                                 break;
                         case '?':
                                 usage(progname);
@@ -252,7 +259,15 @@ free_tables(struct state_info *stats) {
 void
 nf_setup(struct onvm_nf_local_ctx *nf_local_ctx) {
         struct onvm_nf *nf = nf_local_ctx->nf;
-        struct state_info *stats = (struct state_info *)nf->data;
+        struct state_info *stats = rte_calloc("state", 1, sizeof(struct state_info), 0);
+        if (stats == NULL) {
+                onvm_nflib_stop(nf_local_ctx);
+                rte_exit(EXIT_FAILURE, "Unable to initialize NF satas");
+        }
+        stats->print_delay = print_delay;
+        stats->l3fwd_lpm_on = l3fwd_lpm_on;
+        stats->l3fwd_em_on = l3fwd_em_on;
+        stats->hash_entry_number = HASH_ENTRY_NUMBER_DEFAULT;
         l3fwd_initialize_ports(stats);
         l3fwd_initialize_dst(stats);
         /*
@@ -260,22 +275,16 @@ nf_setup(struct onvm_nf_local_ctx *nf_local_ctx) {
          * reset them to default for longest-prefix match.
          */
         if (stats->l3fwd_lpm_on) {
-                if (setup_lpm(stats) < 0) {
-                        onvm_nflib_stop(nf_local_ctx);
-                        rte_free(stats);
-                        rte_exit(EXIT_FAILURE, "Unable to setup LPM\n");
-                }
+                stats->lpm_tbl = lpm_tbl;
                 stats->hash_entry_number = HASH_ENTRY_NUMBER_DEFAULT;
                 printf("\nLongest prefix match enabled. \n");
         } else {
-                if (setup_hash(stats) < 0) {
-                        onvm_nflib_stop(nf_local_ctx);
-                        rte_free(stats);
-                        rte_exit(EXIT_FAILURE, "Unable to setup Hash\n");
-                }
-                printf("Hash table exact match enabled. \n");
-                printf("Hash entry number set to: %d\n", stats->hash_entry_number);
+                printf("Only lpm_tbl enable\n");
+                onvm_nflib_stop(nf_local_ctx);
+                rte_free(stats);
+                rte_exit(EXIT_FAILURE, "Unable to setup Hash\n");
         }
+        nf->data = (void *)stats;
 }
 
 int
@@ -305,25 +314,14 @@ main(int argc, char *argv[]) {
         argc -= arg_offset;
         argv += arg_offset;
 
-        /*
-         * The following allocates a struct which keeps track of all NF state information.
-         * Longest prefix match is enabled by default as well as default values for print delay
-         * and hash entry number.
-         */
-        struct onvm_nf *nf = nf_local_ctx->nf;
-        struct state_info *stats = rte_calloc("state", 1, sizeof(struct state_info), 0);  // Will be freed my manager.
-        if (stats == NULL) {
+        lpm_tbl = setup_lpm_request();
+        if (!lpm_tbl) {
                 onvm_nflib_stop(nf_local_ctx);
-                rte_exit(EXIT_FAILURE, "Unable to initialize NF stats.");
+                rte_exit(EXIT_FAILURE, "Unable to setup LPM\n");
         }
-        stats->print_delay = 1000000;
-        stats->l3fwd_lpm_on = 1;
-        stats->l3fwd_em_on = 0;
-        stats->hash_entry_number = HASH_ENTRY_NUMBER_DEFAULT;
-        nf->data = (void *)stats;
 
         /* Parse application arguments. */
-        if (parse_app_args(argc, argv, progname, stats) < 0) {
+        if (parse_app_args(argc, argv, progname) < 0) {
                 onvm_nflib_stop(nf_local_ctx);
                 rte_exit(EXIT_FAILURE, "Invalid command-line arguments\n");
         }
@@ -333,8 +331,7 @@ main(int argc, char *argv[]) {
                 rte_exit(EXIT_FAILURE, "No Ethernet ports. Ensure ports binded to dpdk. - bye\n");
         }
         onvm_nflib_run(nf_local_ctx);
-
-        free_tables(stats);
+        rte_lpm_free(lpm_tbl);
         onvm_nflib_stop(nf_local_ctx);
         printf("If we reach here, program is ending\n");
         return 0;

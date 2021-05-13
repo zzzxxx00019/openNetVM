@@ -49,23 +49,12 @@
  *
  */
 
+#include <unistd.h>
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <unordered_map>
 #include <vector>
-
-#include <unistd.h>
-
-// We use the BSD primitives throughout as they exist on both BSD and Linux.
-#define __FAVOR_BSD
-#include <arpa/inet.h>
-#include <net/ethernet.h>
-#include <netinet/in.h>
-#include <netinet/in_systm.h>
-#include <netinet/ip.h>
-#include <netinet/ip_icmp.h>
-#include <netinet/tcp.h>
-#include <netinet/udp.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -73,6 +62,7 @@ extern "C" {
 
 #include <rte_common.h>
 #include <rte_ip.h>
+#include <rte_malloc.h>
 #include <rte_mbuf.h>
 
 #include "onvm_nflib.h"
@@ -92,7 +82,6 @@ using std::cout;
 using std::endl;
 using std::ifstream;
 using std::string;
-using std::vector;
 
 #define PKTMBUF_POOL_NAME "MProc_pktmbuf_pool"
 #define NF_TAG "IPS"
@@ -102,16 +91,26 @@ struct rte_mempool *pktmbuf_pool;
 
 /* user defined settings */
 static uint32_t destination = (uint16_t)-1;
-const char *patternFile = "rules/snort3-sql.rules";
-//const char *patternFile = "/home/itlab/openNetVM/hyperscan/ptn";
+// const char *patternFile = "rules/snort3-sql.rules";
+// const char *patternFile = "rules/snort3.rules";
+const char *patternFile = "rules/snort3-community.rules";
 
 /* Hyperscan Module */
-hs_database_t *db_streaming;
-Hyperscan *module;
+// Shared Library between thread
+hs_database_t *db_tcp = NULL;
+hs_database_t *db_udp = NULL;
+hs_database_t *db_icmp = NULL;
+hs_database_t *db_ip = NULL;
+unordered_map<string, vector<string>> alert_msg;
+size_t matchCount;
+
+// Independent module between thread
+//static Hyperscan *module;
 
 // helper function - see end of file
 static void
-parseFile(const char *filename, vector<string> &patterns, vector<unsigned> &flags, vector<unsigned> &ids);
+parseFile(const char *filename, unordered_map<string, vector<string>> &patterns,
+          unordered_map<string, vector<unsigned>> &flags, unordered_map<string, vector<unsigned>> &ids);
 
 static hs_database_t *
 buildDatabase(const vector<const char *> &expressions, const vector<unsigned> flags, const vector<unsigned> ids,
@@ -155,14 +154,14 @@ buildDatabase(const vector<const char *> &expressions, const vector<unsigned> fl
  * database for it.
  */
 static void
-databasesFromFile(const char *filename, hs_database_t **db_streaming) {
+databasesFromFile(const char *filename) {
         // hs_compile_multi requires three parallel arrays containing the patterns,
         // flags and ids that we want to work with. To achieve this we use
         // vectors and new entries onto each for each valid line of input from
         // the pattern file.
-        vector<string> patterns;
-        vector<unsigned> flags;
-        vector<unsigned> ids;
+        unordered_map<string, vector<string>> patterns;
+        unordered_map<string, vector<unsigned>> flags;
+        unordered_map<string, vector<unsigned>> ids;
 
         // do the actual file reading and string handling
         parseFile(filename, patterns, flags, ids);
@@ -170,14 +169,31 @@ databasesFromFile(const char *filename, hs_database_t **db_streaming) {
         // Turn our vector of strings into a vector of char*'s to pass in to
         // hs_compile_multi. (This is just using the vector of strings as dynamic
         // storage.)
-        vector<const char *> cstrPatterns;
-        for (const auto &pattern : patterns) {
-                cstrPatterns.push_back(pattern.c_str());
+        unordered_map<string, vector<const char *>> cstrPatterns;
+        if (patterns.find("tcp") != patterns.end()) {
+                for (const auto &pattern : patterns["tcp"])
+                        cstrPatterns["tcp"].push_back(pattern.c_str());
+                cout << "Compiling Hyperscan databases with tcp: " << patterns["tcp"].size() << " patterns." << endl;
+                db_tcp = buildDatabase(cstrPatterns["tcp"], flags["tcp"], ids["tcp"], HS_MODE_STREAM);
         }
-
-        cout << "Compiling Hyperscan databases with " << patterns.size() << " patterns." << endl;
-
-        *db_streaming = buildDatabase(cstrPatterns, flags, ids, HS_MODE_STREAM);
+        if (patterns.find("udp") != patterns.end()) {
+                for (const auto &pattern : patterns["udp"])
+                        cstrPatterns["udp"].push_back(pattern.c_str());
+                cout << "Compiling Hyperscan databases with udp: " << patterns["udp"].size() << " patterns." << endl;
+                db_udp = buildDatabase(cstrPatterns["udp"], flags["udp"], ids["udp"], HS_MODE_STREAM);
+        }
+        if (patterns.find("icmp") != patterns.end()) {
+                for (const auto &pattern : patterns["icmp"])
+                        cstrPatterns["icmp"].push_back(pattern.c_str());
+                cout << "Compiling Hyperscan databases with icmp: " << patterns["icmp"].size() << " patterns." << endl;
+                db_icmp = buildDatabase(cstrPatterns["icmp"], flags["icmp"], ids["icmp"], HS_MODE_STREAM);
+        }
+        if (patterns.find("ip") != patterns.end()) {
+                for (const auto &pattern : patterns["ip"])
+                        cstrPatterns["ip"].push_back(pattern.c_str());
+                cout << "Compiling Hyperscan databases with ip: " << patterns["ip"].size() << " patterns." << endl;
+                db_ip = buildDatabase(cstrPatterns["ip"], flags["ip"], ids["ip"], HS_MODE_STREAM);
+        }
 }
 
 static void
@@ -207,58 +223,64 @@ parse_app_args(int argc, char *argv[], const char *progname) {
 
 static int
 packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
-               __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
-        struct rte_mbuf *pkt_handler = NULL;
-	bool copy_flag = false;
-	
-	if (meta->payload_write) {
-		copy_flag = true;
-		pkt_handler = rte_pktmbuf_clone(pkt, pktmbuf_pool);
+               struct onvm_nf_local_ctx *nf_local_ctx) {
+	struct onvm_nf *nf = nf_local_ctx->nf;
+	Hyperscan *module = (Hyperscan *)nf->data;
+        struct rte_mbuf *pkt_hdr = NULL;
+        bool copy_flag = false;
 
-		meta->payload_read = false;
-		if (!pkt_handler) {
-			printf("Clone Fail");
-			return 0;
-		}
-	} else {
-		pkt_handler = pkt;
-	}
+        if (meta->payload_write) {
+                copy_flag = true;
+                pkt_hdr = rte_pktmbuf_clone(pkt, pktmbuf_pool);
 
-        u_char *packet = rte_pktmbuf_mtod(pkt_handler, u_char *);
-        module->scanStreams(packet);
+                meta->payload_read = false;
+                if (!pkt_hdr) {
+                        cout << "Clone Fail" << endl;
+                        return 0;
+                }
+        } else {
+                pkt_hdr = pkt;
+        }
 
-	// Drop
+        module->scanModule(pkt_hdr);
+
+        // Drop
         if (module->matchSignal()) {
-		cout << "pktMatch: " << module->matches() << endl;
-                //meta->action = ONVM_NF_ACTION_DROP;
-		onvm_pkt_set_action(pkt, ONVM_NF_ACTION_DROP, 0);
+                // cout << "pktMatch: " << module->matches() << endl;
+                // meta->action = ONVM_NF_ACTION_DROP;
+                onvm_pkt_set_action(pkt, ONVM_NF_ACTION_DROP, 0);
                 return 0;
         }
-	// Pass
+        // Pass
         if (destination != (uint16_t)-1) {
-		onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, destination);
-                //meta->action = ONVM_NF_ACTION_TONF;
-                //meta->destination = destination;
+                onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, destination);
+                // meta->action = ONVM_NF_ACTION_TONF;
+                // meta->destination = destination;
         } else {
-                //meta->action = ONVM_NF_ACTION_OUT;
-                //meta->destination = pkt->port;
+                // meta->action = ONVM_NF_ACTION_OUT;
+                // meta->destination = pkt->port;
                 if (onvm_pkt_swap_src_mac_addr(pkt, meta->destination, ports) != 0) {
                         RTE_LOG(INFO, APP, "ERROR: Failed to swap src mac with dst mac!\n");
                 }
-		onvm_pkt_set_action(pkt, ONVM_NF_ACTION_OUT, pkt->port);
+                onvm_pkt_set_action(pkt, ONVM_NF_ACTION_OUT, pkt->port);
         }
 
-	if (copy_flag)
-		rte_pktmbuf_free(pkt_handler);
+        if (copy_flag)
+                rte_pktmbuf_free(pkt_hdr);
 
         return 0;
 }
 
 void
-nf_setup(__attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
-
-        // Open Stream mode
-       	module->openStreams();
+nf_setup(struct onvm_nf_local_ctx *nf_local_ctx) {
+	struct onvm_nf *nf = nf_local_ctx->nf;
+	Hyperscan *module = (Hyperscan *)rte_malloc(NULL, sizeof(Hyperscan), 0);
+        // Setup Independent Hyperscan engine
+        new (module) Hyperscan(db_tcp, db_udp, db_icmp, db_ip);
+        //module = new Hyperscan(db_tcp, db_udp, db_icmp, db_ip);
+        // Open Moudle
+        module->initModule();
+	nf->data = (void *)module;
 }
 
 // Main entry point.
@@ -295,29 +317,30 @@ main(int argc, char **argv) {
                 onvm_nflib_stop(nf_local_ctx);
                 rte_exit(EXIT_FAILURE, "Invalid command-line arguments\n");
         }
-	
-	pktmbuf_pool = rte_mempool_lookup(PKTMBUF_POOL_NAME);
-	
-	if (!pktmbuf_pool) {
-		onvm_nflib_stop(nf_local_ctx);
-		rte_exit(EXIT_FAILURE, "Cannot find mbuf pool!\n");
-	}
+
+        pktmbuf_pool = rte_mempool_lookup(PKTMBUF_POOL_NAME);
+
+        if (!pktmbuf_pool) {
+                onvm_nflib_stop(nf_local_ctx);
+                rte_exit(EXIT_FAILURE, "Cannot find mbuf pool!\n");
+        }
 
         // Read our pattern set in and build Hyperscan databases from it.
         cout << "Pattern file: " << patternFile << endl;
-        databasesFromFile(patternFile, &db_streaming);
-	
-	// Setup Hyperscan engine
-	Hyperscan engine(db_streaming);
-	module = &engine;
-	
+        databasesFromFile(patternFile);
+
         onvm_nflib_run(nf_local_ctx);
 
         // Close Hyperscan engine
-        module->closeStreams();
-        hs_free_database(db_streaming);
+	struct onvm_nf *nf = nf_local_ctx->nf;
+	Hyperscan *module = (Hyperscan *)nf->data;
+        module->closeModule();
 
         onvm_nflib_stop(nf_local_ctx);
+        hs_free_database(db_tcp);
+        hs_free_database(db_udp);
+        hs_free_database(db_icmp);
+        hs_free_database(db_ip);
         printf("If we reach here, program is ending\n");
         return 0;
         /*
@@ -406,7 +429,7 @@ parseFlags(const string &flagsStr) {
                                 flags |= HS_FLAG_MULTILINE;
                                 break;
                         case 's':
-                               	flags |= HS_FLAG_DOTALL;
+                                flags |= HS_FLAG_DOTALL;
                                 break;
                         case 'H':
                                 flags |= HS_FLAG_SINGLEMATCH;
@@ -431,7 +454,8 @@ parseFlags(const string &flagsStr) {
 }
 
 static void
-parseFile(const char *filename, vector<string> &patterns, vector<unsigned> &flags, vector<unsigned> &ids) {
+parseFile(const char *filename, unordered_map<string, vector<string>> &patterns,
+          unordered_map<string, vector<unsigned>> &flags, unordered_map<string, vector<unsigned>> &ids) {
         ifstream inFile(filename);
         if (!inFile.good()) {
                 cerr << "ERROR: Can't open pattern file \"" << filename << "\"" << endl;
@@ -452,18 +476,34 @@ parseFile(const char *filename, vector<string> &patterns, vector<unsigned> &flag
 
                 size_t pcreStart = line.find("pcre:\"/");
                 if (pcreStart == string::npos)
-			continue;
-		size_t pcreEnd = line.find("\"", pcreStart + 6);
+                        continue;
+                size_t pcreEnd = line.find("\"", pcreStart + 6);
+
+                // split action protocol, e.g.
+                // 	 alert tcp ...
+                /*
+                stringstream ss(line);
+                string action, protocol;
+                getline(ss, action, ' ');
+                getline(ss, protocol, ' ');
+                */
+                size_t protoStart = line.find(" ") + 1;
+                size_t protoEnd = line.find(" ", protoStart);
+                const string protocol(line.substr(protoStart, protoEnd - protoStart));
 
                 // we should have an unsigned int as an ID, before the colon
-                //unsigned id = std::stoi(line.substr(0, colonIdx).c_str());
-                unsigned id = i; // ID = Line number
+                // unsigned id = std::stoi(line.substr(0, colonIdx).c_str());
+                unsigned id = ids[protocol].size();  // ID = Snort rule
+
+                size_t msgStart = line.find("msg:\"");
+                size_t msgEnd = line.find("\"", msgStart + 5);
+                string msg(line.substr(msgStart + 5, msgEnd - msgStart - 5));
 
                 // rest of the expression is the PCRE
                 const string expr(line.substr(pcreStart + 6, pcreEnd - pcreStart - 6));
-		cout << "pcre: " << expr << endl;
+                cout << "alert " << protocol << " pcre:\"" << expr << "\"" << endl;
                 size_t flagsStart = expr.find_last_of('/');
-		
+
                 if (flagsStart == string::npos) {
                         cerr << "ERROR: no trailing '/' char" << endl;
                         exit(-1);
@@ -472,10 +512,11 @@ parseFile(const char *filename, vector<string> &patterns, vector<unsigned> &flag
                 string pcre(expr.substr(1, flagsStart - 1));
                 string flagsStr(expr.substr(flagsStart + 1, expr.size() - flagsStart));
                 unsigned flag = parseFlags(flagsStr);
-		if(!flag)
-			continue;
-                patterns.push_back(pcre);
-                flags.push_back(flag);
-                ids.push_back(id);
+                if (!flag)
+                        continue;
+                patterns[protocol].push_back(pcre);
+                flags[protocol].push_back(flag);
+                ids[protocol].push_back(id);
+                alert_msg[protocol].push_back(msg);
         }
 }
