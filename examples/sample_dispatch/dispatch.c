@@ -87,10 +87,10 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
         meta->payload_read = true;
         dst |= (1 << 3);
         // Destination 4 is payload write test NF, Set payload_write flag to 1
-        meta->payload_write = true;
-        dst |= (1 << 4);
+        meta->payload_write = false;
+        //dst |= (1 << 4);
         // Destination 5 is l3fwd
-        dst |= (1 << 5);
+        //dst |= (1 << 5);
         
         onvm_pkt_set_action(pkt, ONVM_NF_ACTION_PARA, dst);
 

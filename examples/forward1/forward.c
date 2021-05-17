@@ -18,7 +18,6 @@
 #include "onvm_nflib.h"
 #include "onvm_pkt_helper.h"
 
-//#define PKTMBUF_POOL_NAME "MProc_pktmbuf_pool"
 #define PKTMBUF_CLONE_POOL_NAME "Mproc_pktmbuf_clone_pool"
 #define NF_TAG "parallel_fwd_1"
 
@@ -85,8 +84,10 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                 handle_pkt = pkt;
         }
         // Handle the packet
-        onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, 5);
-	//rte_delay_us_block(1);
+        //onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, 5);
+	meta->action = ONVM_NF_ACTION_TONF;
+	meta->destination = 5;
+	rte_delay_us_block(1);
 
         // If packet is be copied, need to free the memory
         if (copy_flag == true) {
@@ -130,7 +131,6 @@ main(int argc, char *argv[]) {
         cur_cycles = rte_get_tsc_cycles();
         last_cycle = rte_get_tsc_cycles();
 
-        //pktmbuf_pool = rte_mempool_lookup(PKTMBUF_POOL_NAME);
         pktmbuf_pool = rte_mempool_lookup(PKTMBUF_CLONE_POOL_NAME);
 	
 	if (pktmbuf_pool == NULL) {

@@ -320,7 +320,6 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
         struct onvm_pkt_meta *meta = onvm_get_pkt_meta(pkt);
         int ret;
 
-        /*Bug, flow_entry will cause segementation fault*/
         ret = onvm_flow_dir_get_pkt(pkt, &flow_entry);
         if (ret >= 0) {
                 sc = flow_entry->sc;
@@ -328,8 +327,6 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
                 meta->destination = onvm_sc_next_destination(sc, pkt);
         } else {
                 meta->action = ONVM_NF_ACTION_DROP;
-                // meta->action = onvm_sc_next_action(default_chain, pkt);
-                // meta->destination = onvm_sc_next_destination(default_chain, pkt);
         }
 
         if (meta->has_mutex) {
