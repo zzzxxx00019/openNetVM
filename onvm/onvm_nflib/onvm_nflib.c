@@ -585,9 +585,9 @@ onvm_nflib_thread_main_loop(void *arg) {
 
         printf("Sending NF_READY message to manager...\n");
         ret = onvm_nflib_nf_ready(nf);
-	if (nf->thread_info.parent) {
-		nfs[nf->thread_info.parent].wait_flag = false;
-	}
+        if (nf->thread_info.parent) {
+                nfs[nf->thread_info.parent].wait_flag = false;
+        }
         if (ret != 0)
                 rte_exit(EXIT_FAILURE, "Unable to message manager\n");
 
@@ -699,9 +699,9 @@ onvm_nflib_handle_msg(struct onvm_nf_msg *msg, struct onvm_nf_local_ctx *nf_loca
         switch (msg->msg_type) {
                 case MSG_STOP:
                         RTE_LOG(INFO, APP, "Shutting down...\n");
-			struct onvm_nf *parent_nf = &nfs[services[nf_local_ctx->nf->service_id][0]];
+                        struct onvm_nf *parent_nf = &nfs[services[nf_local_ctx->nf->service_id][0]];
                         rte_atomic16_set(&nf_local_ctx->keep_running, 0);
-			parent_nf->wait_flag = false;
+                        parent_nf->wait_flag = false;
                         break;
                 case MSG_SCALE:
                         RTE_LOG(INFO, APP, "Received scale message...\n");

@@ -283,7 +283,7 @@ struct onvm_nf {
         char *tag;
         /* Pointer to NF defined state data */
         void *data;
-	volatile bool wait_flag;
+        volatile bool wait_flag;
 
         struct {
                 uint16_t core;

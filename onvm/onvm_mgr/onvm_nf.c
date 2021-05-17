@@ -53,13 +53,24 @@
 
 #define high_threshold 10000
 #define low_threshold 2000
-#define Max_Child 1
+#define Max_Child 6
 
 /* ID 0 is reserved */
 uint16_t next_instance_id = 1;
 uint16_t starting_instance_id = 1;
 
 /************************Internal functions prototypes************************/
+static void
+onvm_nf_instance_stop(struct onvm_nf *parent_nf, struct onvm_nf *stop_instance);
+
+static void
+onvm_nf_instance_wakeup(struct onvm_nf *parent_nf);
+
+static void
+onvm_nf_scaling_nf(struct onvm_nf *parent_nf);
+
+static void
+onvm_nf_sleep_instance(struct onvm_nf *parent_nf, struct onvm_nf *sleep_nf);
 
 /*
  * Function starting a NF.
@@ -248,7 +259,6 @@ onvm_nf_send_msg(uint16_t dest, uint8_t msg_type, void *msg_data) {
 void
 onvm_nf_scaling(void) {
         uint32_t rx_buffer_for_service[MAX_SERVICES] = {0};
-        //bool stop_wait_flag[MAX_SERVICES] = {0};
 
         for (int i = 0; i < MAX_NFS; i++) {
                 if (!onvm_nf_is_valid(&nfs[i]))
@@ -259,14 +269,7 @@ onvm_nf_scaling(void) {
                                 struct onvm_nf *parent_nf = &nfs[nfs[i].thread_info.parent];
 
                                 if (nfs[i].instance_id == parent_nf->thread_info.sleep_instance[0]) {
-                                        parent_nf->thread_info.sleep_count--;
-                                        for (int j = 1; j <= parent_nf->thread_info.sleep_count; j++) {
-                                                parent_nf->thread_info.sleep_instance[j - 1] =
-                                                    parent_nf->thread_info.sleep_instance[j];
-                                        }
-                                        //stop_wait_flag[parent_nf->service_id] = true;
-					parent_nf->wait_flag = true;
-                                        onvm_nf_send_msg(i, MSG_STOP, NULL);
+                                        onvm_nf_instance_stop(parent_nf, &nfs[i]);
                                 } else {
                                         printf("error might happend...\n");
                                 }
@@ -282,7 +285,7 @@ onvm_nf_scaling(void) {
         }
         printf(
             "\n--------------------------------------------------------------------------------------------------------"
-            "-----\n");
+            "--------\n");
         for (int i = 0; i < MAX_SERVICES; i++) {
                 uint16_t nfs_for_service = nf_per_service_count[i];
                 if (!nfs_for_service)
@@ -296,18 +299,11 @@ onvm_nf_scaling(void) {
                         nfs[parent_instance_ID].thread_info.wait_counter = 10;
 
                         if (nfs[parent_instance_ID].thread_info.sleep_count) {
-                                printf("wake up sleep instance for service %d\n", i);
                                 struct onvm_nf *parent_nf = &nfs[parent_instance_ID];
-                                uint32_t wake_instance =
-                                    parent_nf->thread_info.sleep_instance[--parent_nf->thread_info.sleep_count];
-                                struct onvm_nf *wake_nf = &nfs[wake_instance];
-                                wake_nf->thread_info.sleep_flag = false;
-                                nf_per_service_count[i]++;
-                        } else if (nfs[parent_instance_ID].thread_info.nums_child < Max_Child && nfs[parent_instance_ID].wait_flag == false) {
-                                printf("Send scaling msg to service %d with instance %d\n", i, parent_instance_ID);
-                                struct onvm_nf_scale_info *scale_info = NULL;
-				nfs[parent_instance_ID].wait_flag = true;
-                                onvm_nf_send_msg(parent_instance_ID, MSG_SCALE, scale_info);
+                                onvm_nf_instance_wakeup(parent_nf);
+                        } else if (nfs[parent_instance_ID].thread_info.nums_child < Max_Child &&
+                                   nfs[parent_instance_ID].wait_flag == false) {
+                                onvm_nf_scaling_nf(&nfs[parent_instance_ID]);
                         } else {
                                 printf("Do back pressure in the future\n");
                                 /* Drop the packet which will enter this overloading service */
@@ -322,17 +318,49 @@ onvm_nf_scaling(void) {
                                 uint32_t sleep_instance = services[i][nfs_for_service - 1];
                                 struct onvm_nf *sleep_nf = &nfs[sleep_instance];
                                 struct onvm_nf *parent_nf = &nfs[parent_instance_ID];
-                                nf_per_service_count[i]--;
-                                sleep_nf->thread_info.sleep_flag = true;
-                                parent_nf->thread_info.sleep_instance[parent_nf->thread_info.sleep_count++] =
-                                    sleep_instance;
-                                printf("Sleep instance : %d\n", sleep_instance);
+                                onvm_nf_sleep_instance(parent_nf, sleep_nf);
                         }
                 }
         }
 }
 
 /******************************Internal functions*****************************/
+static void
+onvm_nf_instance_stop(struct onvm_nf *parent_nf, struct onvm_nf *stop_instance) {
+        parent_nf->thread_info.sleep_count--;
+        for (int i = 1; i <= parent_nf->thread_info.sleep_count; i++) {
+                parent_nf->thread_info.sleep_instance[i - 1] = parent_nf->thread_info.sleep_instance[i];
+        }
+        parent_nf->wait_flag = true;
+        onvm_nf_send_msg(stop_instance->instance_id, MSG_STOP, NULL);
+}
+
+static void
+onvm_nf_instance_wakeup(struct onvm_nf *parent_nf) {
+        printf("Wake up sleep instance for service %d\n", parent_nf->service_id);
+        uint32_t wake_instance = parent_nf->thread_info.sleep_instance[--parent_nf->thread_info.sleep_count];
+        struct onvm_nf *wake_nf = &nfs[wake_instance];
+        wake_nf->thread_info.sleep_flag = false;
+        nf_per_service_count[parent_nf->service_id]++;
+}
+
+static void
+onvm_nf_scaling_nf(struct onvm_nf *parent_nf) {
+        printf("Send scaling msg to service %d with instance %d\n", parent_nf->service_id, parent_nf->instance_id);
+        struct onvm_nf_scaling *scale_info = NULL;
+        parent_nf->wait_flag = true;
+        onvm_nf_send_msg(parent_nf->instance_id, MSG_SCALE, scale_info);
+}
+
+static void
+onvm_nf_sleep_instance(struct onvm_nf *parent_nf, struct onvm_nf *sleep_nf) {
+        uint32_t service_id = parent_nf->service_id;
+        uint32_t sleep_instance = sleep_nf->instance_id;
+        nf_per_service_count[service_id]--;
+        sleep_nf->thread_info.sleep_flag = true;
+        parent_nf->thread_info.sleep_instance[parent_nf->thread_info.sleep_count++] = sleep_instance;
+        printf("Sleep instance : %d\n", sleep_instance);
+}
 
 inline static int
 onvm_nf_start(struct onvm_nf_init_cfg *nf_init_cfg) {
