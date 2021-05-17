@@ -47,6 +47,7 @@
 ******************************************************************************/
 
 #include "onvm_pkt_common.h"
+
 /**********************Internal Functions Prototypes**************************/
 
 /*
@@ -82,6 +83,12 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
 static int
 onvm_pkt_drop(struct rte_mbuf *pkt);
 
+static inline sem_t *
+onvm_get_pkt_mutex(int mutex_id);
+
+void
+onvm_init_pkt_mutex(void);
+
 /*
  * Set packet meta action and destination
  * This API will check priority when run parallel
@@ -92,12 +99,6 @@ onvm_pkt_drop(struct rte_mbuf *pkt);
  */
 int
 onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination);
-
-/*
- * Get packet's mutex to avoid race conditions
- */
-inline sem_t *
-onvm_get_pkt_mutex(int mutex_id);
 
 /**********************************Interfaces*********************************/
 
@@ -115,7 +116,7 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                 meta->src = nf->instance_id;
 
                 if (meta->has_mutex) {
-                        sem_t *pkt_mutex = onvm_get_pkt_mutex(pkts[i]->hash.rss % 10);
+                        sem_t *pkt_mutex = onvm_pkt_mutex[pkts[i]->hash.rss % 10];
                         sem_wait(pkt_mutex);
                         if (meta->numNF) {
                                 if (--meta->numNF) {
@@ -320,7 +321,6 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
         struct onvm_pkt_meta *meta = onvm_get_pkt_meta(pkt);
         int ret;
 
-        /*Bug, flow_entry will cause segementation fault*/
         ret = onvm_flow_dir_get_pkt(pkt, &flow_entry);
         if (ret >= 0) {
                 sc = flow_entry->sc;
@@ -328,12 +328,10 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
                 meta->destination = onvm_sc_next_destination(sc, pkt);
         } else {
                 meta->action = ONVM_NF_ACTION_DROP;
-                // meta->action = onvm_sc_next_action(default_chain, pkt);
-                // meta->destination = onvm_sc_next_destination(default_chain, pkt);
         }
 
         if (meta->has_mutex) {
-                sem_t *pkt_mutex = onvm_get_pkt_mutex(pkt->hash.rss % 10);
+                sem_t *pkt_mutex = onvm_pkt_mutex[pkt->hash.rss % 10];
                 sem_wait(pkt_mutex);
                 if (meta->numNF) {
                         if (--meta->numNF) {
@@ -396,7 +394,7 @@ onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination) {
         struct onvm_pkt_meta *meta = onvm_get_pkt_meta(pkt);
 
         if (meta->has_mutex) {
-                sem_t *pkt_mutex = onvm_get_pkt_mutex(pkt->hash.rss % 10);
+                sem_t *pkt_mutex = onvm_pkt_mutex[pkt->hash.rss % 10];
                 sem_wait(pkt_mutex);
                 if (action > meta->action) {
                         meta->action = action;
@@ -409,6 +407,13 @@ onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination) {
         }
 
         return 0;
+}
+
+void
+onvm_init_pkt_mutex(void) {
+        for (int i = 0; i < 10; i++) {
+                onvm_pkt_mutex[i] = onvm_get_pkt_mutex(i);
+        }
 }
 
 inline sem_t *

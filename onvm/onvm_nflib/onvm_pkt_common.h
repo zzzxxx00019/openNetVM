@@ -62,6 +62,11 @@ extern struct onvm_service_chain *default_chain;
 
 /*********************************Interfaces**********************************/
 
+sem_t *onvm_pkt_mutex[10];
+
+void
+onvm_init_pkt_mutex(void);
+
 /*
  * Interface to process packets in a given TX queue.
  *
@@ -136,13 +141,5 @@ onvm_pkt_enqueue_tx_thread(struct packet_buf *pkt_buf, struct onvm_nf *nf);
  */
 int
 onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination);
-
-/*
- * Get packet's mutex to avoid race conditions
- *
- * Input : packet's rss % 10 due to 10 mutex set
- */
-sem_t *
-onvm_get_pkt_mutex(int mutex_id);
 
 #endif  // _ONVM_PKT_COMMON_H_
