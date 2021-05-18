@@ -70,6 +70,10 @@ onvm_pkt_process_rx_batch(struct queue_mgr *rx_mgr, struct rte_mbuf *pkts[], uin
                 meta = (struct onvm_pkt_meta *)&(((struct rte_mbuf *)pkts[i])->udata64);
                 meta->src = 0;
                 meta->chain_index = 0;
+                meta->numNF = 0;
+                meta->has_mutex = false;
+                meta->payload_read = false;
+                meta->payload_write = false;
 #ifdef FLOW_LOOKUP
                 ret = onvm_flow_dir_get_pkt(pkts[i], &flow_entry);
                 if (ret >= 0) {
