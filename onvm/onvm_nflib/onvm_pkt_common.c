@@ -48,6 +48,8 @@
 
 #include "onvm_pkt_common.h"
 
+sem_t *onvm_pkt_mutex[10];
+
 /**********************Internal Functions Prototypes**************************/
 
 /*

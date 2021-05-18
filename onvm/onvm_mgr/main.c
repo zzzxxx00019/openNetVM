@@ -125,7 +125,7 @@ master_thread_main(void) {
                 }
 
                 if (NF_SCALING) {
-                        onvm_nf_scaling();
+                        onvm_nf_scaling(sleeptime);
                 }
         }
 
