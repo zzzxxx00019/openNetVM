@@ -48,7 +48,8 @@
 
 #include "onvm_pkt_common.h"
 
-sem_t *onvm_pkt_mutex[10];
+sem_t *onvm_pkt_mutex[16];
+sem_t *onvm_set_action_mutex[16];
 
 /**********************Internal Functions Prototypes**************************/
 
@@ -89,6 +90,9 @@ static inline sem_t *
 onvm_get_pkt_mutex(int mutex_id);
 
 void
+onvm_init_set_action_mutex(void);
+
+void
 onvm_init_pkt_mutex(void);
 
 /*
@@ -118,7 +122,7 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                 meta->src = nf->instance_id;
 
                 if (meta->has_mutex) {
-                        sem_t *pkt_mutex = onvm_pkt_mutex[pkts[i]->hash.rss % 10];
+                        sem_t *pkt_mutex = onvm_pkt_mutex[pkts[i]->hash.rss & 0x1111];
                         sem_wait(pkt_mutex);
                         if (meta->numNF) {
                                 if (--meta->numNF) {
@@ -333,7 +337,7 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
         }
 
         if (meta->has_mutex) {
-                sem_t *pkt_mutex = onvm_pkt_mutex[pkt->hash.rss % 10];
+                sem_t *pkt_mutex = onvm_pkt_mutex[pkt->hash.rss & 0x1111];
                 sem_wait(pkt_mutex);
                 if (meta->numNF) {
                         if (--meta->numNF) {
@@ -396,7 +400,7 @@ onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination) {
         struct onvm_pkt_meta *meta = onvm_get_pkt_meta(pkt);
 
         if (meta->has_mutex) {
-                sem_t *pkt_mutex = onvm_pkt_mutex[pkt->hash.rss % 10];
+                sem_t *pkt_mutex = onvm_pkt_mutex[pkt->hash.rss & 0x1111];
                 sem_wait(pkt_mutex);
                 if (action > meta->action) {
                         meta->action = action;
@@ -413,9 +417,29 @@ onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination) {
 
 void
 onvm_init_pkt_mutex(void) {
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 16; i++) {
                 onvm_pkt_mutex[i] = onvm_get_pkt_mutex(i);
         }
+}
+
+void
+onvm_init_set_action_mutex(void) {
+        onvm_set_action_mutex[0] = sem_open("set_action_mutex0", 0);
+        onvm_set_action_mutex[1] = sem_open("set_action_mutex1", 0);
+        onvm_set_action_mutex[2] = sem_open("set_action_mutex2", 0);
+        onvm_set_action_mutex[3] = sem_open("set_action_mutex3", 0);
+        onvm_set_action_mutex[4] = sem_open("set_action_mutex4", 0);
+        onvm_set_action_mutex[5] = sem_open("set_action_mutex5", 0);
+        onvm_set_action_mutex[6] = sem_open("set_action_mutex6", 0);
+        onvm_set_action_mutex[7] = sem_open("set_action_mutex7", 0);
+        onvm_set_action_mutex[8] = sem_open("set_action_mutex8", 0);
+        onvm_set_action_mutex[9] = sem_open("set_action_mutex9", 0);
+        onvm_set_action_mutex[10] = sem_open("set_action_mutex10", 0);
+        onvm_set_action_mutex[11] = sem_open("set_action_mutex11", 0);
+        onvm_set_action_mutex[12] = sem_open("set_action_mutex12", 0);
+        onvm_set_action_mutex[13] = sem_open("set_action_mutex13", 0);
+        onvm_set_action_mutex[14] = sem_open("set_action_mutex14", 0);
+        onvm_set_action_mutex[15] = sem_open("set_action_mutex15", 0);
 }
 
 inline sem_t *
@@ -441,6 +465,18 @@ onvm_get_pkt_mutex(int mutex_id) {
                         return sem_open("pkt_mutex8", 0);
                 case 9:
                         return sem_open("pkt_mutex9", 0);
+                case 10:
+                        return sem_open("pkt_mutex10", 0);
+                case 11:
+                        return sem_open("pkt_mutex11", 0);
+                case 12:
+                        return sem_open("pkt_mutex12", 0);
+                case 13:
+                        return sem_open("pkt_mutex13", 0);
+                case 14:
+                        return sem_open("pkt_mutex14", 0);
+                case 15:
+                        return sem_open("pkt_mutex15", 0);
         }
         return NULL;
 }

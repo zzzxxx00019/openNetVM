@@ -583,6 +583,7 @@ onvm_nflib_thread_main_loop(void *arg) {
         nf = nf_local_ctx->nf;
         onvm_threading_core_affinitize(nf->thread_info.core);
         onvm_init_pkt_mutex();
+        onvm_init_set_action_mutex();
 
         printf("Sending NF_READY message to manager...\n");
         ret = onvm_nflib_nf_ready(nf);

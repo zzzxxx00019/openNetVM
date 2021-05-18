@@ -71,6 +71,9 @@ struct onvm_service_chain **default_sc_p;
 /*************************Internal Functions Prototypes***********************/
 
 static void
+init_set_action_mutex(void);
+
+static void
 init_pkt_mutex(void);
 
 static void
@@ -166,14 +169,7 @@ init(int argc, char *argv[]) {
         total_ports = rte_eth_dev_count_avail();
 
         /* initial shared mutex */
-        /*
-        sem_t *mutex = sem_open ("pkt_mutex", O_CREAT | O_EXCL, 0644, 1);
-        if(mutex == SEM_FAILED) {
-                fprintf(stderr, "can not create semaphore\n");
-                sem_unlink("pkt_mutex");
-                exit(1);
-        }
-        */
+        init_set_action_mutex();
         init_pkt_mutex();
 
         /* set up array for NF tx data */
@@ -288,9 +284,45 @@ init(int argc, char *argv[]) {
 
 /*****************************Internal functions******************************/
 
-static void
+static inline void
+init_set_action_mutex(void) {
+        char mutex_name[16][20];
+        strcpy(mutex_name[0], "set_action_mutex0");
+        strcpy(mutex_name[1], "set_action_mutex1");
+        strcpy(mutex_name[2], "set_action_mutex2");
+        strcpy(mutex_name[3], "set_action_mutex3");
+        strcpy(mutex_name[4], "set_action_mutex4");
+        strcpy(mutex_name[5], "set_action_mutex5");
+        strcpy(mutex_name[6], "set_action_mutex6");
+        strcpy(mutex_name[7], "set_action_mutex7");
+        strcpy(mutex_name[8], "set_action_mutex8");
+        strcpy(mutex_name[9], "set_action_mutex9");
+        strcpy(mutex_name[10], "set_action_mutex10");
+        strcpy(mutex_name[11], "set_action_mutex11");
+        strcpy(mutex_name[12], "set_action_mutex12");
+        strcpy(mutex_name[13], "set_action_mutex13");
+        strcpy(mutex_name[14], "set_action_mutex14");
+        strcpy(mutex_name[15], "set_action_mutex15");
+
+        for (int i = 0; i < 15; i++) {
+                sem_t *mutex = sem_open(mutex_name[i], O_CREAT | O_EXCL, 0644, 1);
+                if (mutex == SEM_FAILED) {
+                        sem_unlink(mutex_name[i]);
+                        mutex = sem_open(mutex_name[i], O_CREAT | O_EXCL, 0644, 1);
+                        if (mutex == SEM_FAILED) {
+                                fprintf(stderr, "can not create semaphore for action set mutex");
+                                exit(1);
+                        }
+                }
+                sem_wait(mutex);
+                printf("%s create success\n", mutex_name[i]);
+                sem_post(mutex);
+        }
+}
+
+static inline void
 init_pkt_mutex(void) {
-        char mutex_name[10][15];
+        char mutex_name[16][20];
         strcpy(mutex_name[0], "pkt_mutex0");
         strcpy(mutex_name[1], "pkt_mutex1");
         strcpy(mutex_name[2], "pkt_mutex2");
@@ -301,8 +333,14 @@ init_pkt_mutex(void) {
         strcpy(mutex_name[7], "pkt_mutex7");
         strcpy(mutex_name[8], "pkt_mutex8");
         strcpy(mutex_name[9], "pkt_mutex9");
+        strcpy(mutex_name[10], "pkt_mutex10");
+        strcpy(mutex_name[11], "pkt_mutex11");
+        strcpy(mutex_name[12], "pkt_mutex12");
+        strcpy(mutex_name[13], "pkt_mutex13");
+        strcpy(mutex_name[14], "pkt_mutex14");
+        strcpy(mutex_name[15], "pkt_mutex15");
 
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 16; i++) {
                 sem_t *mutex = sem_open(mutex_name[i], O_CREAT | O_EXCL, 0644, 1);
                 if (mutex == SEM_FAILED) {
                         sem_unlink(mutex_name[i]);
@@ -339,9 +377,11 @@ init_mbuf_pools(void) {
                                           sizeof(struct rte_pktmbuf_pool_private), rte_pktmbuf_pool_init, NULL,
                                           rte_pktmbuf_init, NULL, rte_socket_id(), NO_FLAGS);
 
-	pktmbuf_clone_pool = rte_pktmbuf_pool_create(PKTMBUF_CLONE_POOL_NAME, NUM_MBUFS, MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+        printf("Creating clone mbuf pool '%s' [%u mbufs] ...\n", PKTMBUF_CLONE_POOL_NAME, NUM_MBUFS);
+        pktmbuf_clone_pool = rte_pktmbuf_pool_create(PKTMBUF_CLONE_POOL_NAME, NUM_MBUFS, MBUF_CACHE_SIZE, 0,
+                                                     RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
 
-        return (pktmbuf_pool == NULL)|(pktmbuf_clone_pool == NULL); /* 0  on success */
+        return (pktmbuf_pool == NULL) | (pktmbuf_clone_pool == NULL); /* 0  on success */
 }
 
 /**

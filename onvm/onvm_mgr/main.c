@@ -179,7 +179,7 @@ master_thread_main(void) {
 
         RTE_LOG(INFO, APP, "Core %d: Master thread done\n", rte_lcore_id());
 
-        char mutex_name[10][15];
+        char mutex_name[16][20];
         strcpy(mutex_name[0], "pkt_mutex0");
         strcpy(mutex_name[1], "pkt_mutex1");
         strcpy(mutex_name[2], "pkt_mutex2");
@@ -190,14 +190,46 @@ master_thread_main(void) {
         strcpy(mutex_name[7], "pkt_mutex7");
         strcpy(mutex_name[8], "pkt_mutex8");
         strcpy(mutex_name[9], "pkt_mutex9");
+        strcpy(mutex_name[10], "pkt_mutex10");
+        strcpy(mutex_name[11], "pkt_mutex11");
+        strcpy(mutex_name[12], "pkt_mutex12");
+        strcpy(mutex_name[13], "pkt_mutex13");
+        strcpy(mutex_name[14], "pkt_mutex14");
+        strcpy(mutex_name[15], "pkt_mutex15");
 
-        for (i = 0; i < 10; i++) {
+        for (i = 0; i < 16; i++) {
                 sem_t *mutex = sem_open(mutex_name[i], 0);
                 sem_close(mutex);
                 if (sem_unlink(mutex_name[i])) {
                         RTE_LOG(INFO, APP, "Binary semaphore destroy fail...\n");
                 }
         }
+
+        strcpy(mutex_name[0], "set_action_mutex0");
+        strcpy(mutex_name[1], "set_action_mutex1");
+        strcpy(mutex_name[2], "set_action_mutex2");
+        strcpy(mutex_name[3], "set_action_mutex3");
+        strcpy(mutex_name[4], "set_action_mutex4");
+        strcpy(mutex_name[5], "set_action_mutex5");
+        strcpy(mutex_name[6], "set_action_mutex6");
+        strcpy(mutex_name[7], "set_action_mutex7");
+        strcpy(mutex_name[8], "set_action_mutex8");
+        strcpy(mutex_name[9], "set_action_mutex9");
+        strcpy(mutex_name[10], "set_action_mutex10");
+        strcpy(mutex_name[11], "set_action_mutex11");
+        strcpy(mutex_name[12], "set_action_mutex12");
+        strcpy(mutex_name[13], "set_action_mutex13");
+        strcpy(mutex_name[14], "set_action_mutex14");
+        strcpy(mutex_name[15], "set_action_mutex15");
+
+        for (i = 0; i < 16; i++) {
+                sem_t *mutex = sem_open(mutex_name[i], 0);
+                sem_close(mutex);
+                if (sem_unlink(mutex_name[i])) {
+                        RTE_LOG(INFO, APP, "Binary semaphore destroy fail...\n");
+                }
+        }
+
         struct rte_mempool *pktmbuf_clone_pool = rte_mempool_lookup(PKTMBUF_CLONE_POOL_NAME);
         if (pktmbuf_clone_pool) {
                 rte_mempool_free(pktmbuf_clone_pool);

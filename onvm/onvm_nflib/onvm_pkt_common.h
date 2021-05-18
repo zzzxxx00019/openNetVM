@@ -63,6 +63,9 @@ extern struct onvm_service_chain *default_chain;
 /*********************************Interfaces**********************************/
 
 void
+onvm_init_set_action_mutex(void);
+
+void
 onvm_init_pkt_mutex(void);
 
 /*
