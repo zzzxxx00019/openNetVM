@@ -61,7 +61,6 @@ onvm_sc_service_to_nf_map(uint16_t service_id, struct rte_mbuf *pkt) {
         uint16_t instance_index = pkt->hash.rss % num_nfs_available;
         uint16_t instance_id = services[service_id][instance_index];
 
-        // return nfs[instance_id].overloading_flag ? 0 : instance_id;
         return instance_id;
 }
 
