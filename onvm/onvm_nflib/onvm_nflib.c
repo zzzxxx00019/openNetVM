@@ -607,6 +607,8 @@ onvm_nflib_thread_main_loop(void *arg) {
                         }
                 }
 
+                // nf->overloading_flag = rte_ring_count(nf->rx_q) > 100 ? true : false;
+
                 nb_pkts_added =
                     onvm_nflib_dequeue_packets((void **)pkts, nf_local_ctx, nf->function_table->pkt_handler);
 

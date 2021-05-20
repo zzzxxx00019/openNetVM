@@ -201,7 +201,7 @@ master_thread_main(void) {
                 sem_t *mutex = sem_open(mutex_name[i], 0);
                 sem_close(mutex);
                 if (sem_unlink(mutex_name[i])) {
-                        RTE_LOG(INFO, APP, "Binary semaphore destroy fail...\n");
+                        RTE_LOG(INFO, APP, "Binary semaphore pkt_mutex destroy fail...\n");
                 }
         }
 
@@ -226,7 +226,7 @@ master_thread_main(void) {
                 sem_t *mutex = sem_open(mutex_name[i], 0);
                 sem_close(mutex);
                 if (sem_unlink(mutex_name[i])) {
-                        RTE_LOG(INFO, APP, "Binary semaphore destroy fail...\n");
+                        RTE_LOG(INFO, APP, "Binary semaphore set_action_mutex destroy fail...\n");
                 }
         }
 

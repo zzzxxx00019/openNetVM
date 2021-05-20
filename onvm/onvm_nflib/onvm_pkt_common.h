@@ -60,7 +60,16 @@
 extern struct port_info *ports;
 extern struct onvm_service_chain *default_chain;
 
-/*********************************Interfaces**********************************/
+/*********************************My Function**********************************/
+
+uint8_t
+onvm_pkt_set_meta_bit(uint8_t flags, uint8_t n);
+
+uint8_t
+onvm_pkt_check_meta_bit(uint8_t flags, uint8_t n);
+
+uint8_t
+onvm_pkt_clear_meta_bit(uint8_t flags, uint8_t n);
 
 void
 onvm_init_set_action_mutex(void);
@@ -68,6 +77,7 @@ onvm_init_set_action_mutex(void);
 void
 onvm_init_pkt_mutex(void);
 
+/*********************************Interfaces**********************************/
 /*
  * Interface to process packets in a given TX queue.
  *

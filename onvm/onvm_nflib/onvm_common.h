@@ -112,15 +112,17 @@
 /* If a lot of children spawned this might need to be increased */
 #define NF_TERM_STOP_ITER_TIMES 10
 
+#define PKT_META_PAYLOAD_READ 0
+#define PKT_META_PAYLOAD_WRITE 1
+#define PKT_META_HAS_MUTEX 2
+
 struct onvm_pkt_meta {
-        uint8_t action;      /* Action to be performed */
-        uint8_t destination; /* where to go next */
-        uint8_t src;         /* who processed the packet last */
-        uint8_t chain_index; /*index of the current step in the service chain*/
-        uint8_t numNF;       /* Number of parallel NFs */
-        bool has_mutex;
-        volatile bool payload_read;
-        volatile bool payload_write;
+        uint8_t action;         /* Action to be performed */
+        uint8_t destination;    /* where to go next */
+        uint8_t src;            /* who processed the packet last */
+        uint8_t chain_index;    /*index of the current step in the service chain*/
+        volatile uint8_t numNF; /* Number of parallel NFs */
+        volatile uint8_t flags;
 };
 
 static inline struct onvm_pkt_meta *
@@ -164,7 +166,7 @@ struct tx_thread_info {
  */
 struct packet_buf {
         struct rte_mbuf *buffer[PACKET_READ_SIZE];
-        uint16_t count;
+        unsigned int count;
 };
 
 /*
@@ -285,6 +287,7 @@ struct onvm_nf {
         /* Pointer to NF defined state data */
         void *data;
         volatile bool wait_flag;
+        volatile bool overloading_flag;
 
         struct {
                 uint16_t core;

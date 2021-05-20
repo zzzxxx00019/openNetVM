@@ -304,7 +304,7 @@ init_set_action_mutex(void) {
         strcpy(mutex_name[14], "set_action_mutex14");
         strcpy(mutex_name[15], "set_action_mutex15");
 
-        for (int i = 0; i < 15; i++) {
+        for (int i = 0; i < 16; i++) {
                 sem_t *mutex = sem_open(mutex_name[i], O_CREAT | O_EXCL, 0644, 1);
                 if (mutex == SEM_FAILED) {
                         sem_unlink(mutex_name[i]);
