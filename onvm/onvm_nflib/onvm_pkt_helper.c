@@ -156,7 +156,7 @@ onvm_pkt_tcp_hdr(struct rte_mbuf* pkt) {
         }
 
         uint8_t* pkt_data =
-                rte_pktmbuf_mtod(pkt, uint8_t*) + sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr);
+            rte_pktmbuf_mtod(pkt, uint8_t*) + sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr);
         return (struct rte_tcp_hdr*)pkt_data;
 }
 
@@ -175,14 +175,14 @@ onvm_pkt_udp_hdr(struct rte_mbuf* pkt) {
         }
 
         uint8_t* pkt_data =
-                rte_pktmbuf_mtod(pkt, uint8_t*) + sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr);
+            rte_pktmbuf_mtod(pkt, uint8_t*) + sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr);
         return (struct rte_udp_hdr*)pkt_data;
 }
 
 struct rte_ipv4_hdr*
 onvm_pkt_ipv4_hdr(struct rte_mbuf* pkt) {
         struct rte_ipv4_hdr* ipv4 =
-                (struct rte_ipv4_hdr*)(rte_pktmbuf_mtod(pkt, uint8_t*) + sizeof(struct rte_ether_hdr));
+            (struct rte_ipv4_hdr*)(rte_pktmbuf_mtod(pkt, uint8_t*) + sizeof(struct rte_ether_hdr));
 
         /* In an IP packet, the first 4 bits determine the version.
          * The next 4 bits are called the Internet Header Length, or IHL.
@@ -379,8 +379,8 @@ onvm_pkt_parse_ip(char* ip_str, uint32_t* dest) {
 
 void
 onvm_pkt_parse_char_ip(char* ip_dest, uint32_t ip_src) {
-        snprintf(ip_dest, 16, "%u.%u.%u.%u", (ip_src >> 24) & 0xFF, (ip_src >> 16) & 0xFF,
-                (ip_src >> 8) & 0xFF, ip_src & 0xFF);
+        snprintf(ip_dest, 16, "%u.%u.%u.%u", (ip_src >> 24) & 0xFF, (ip_src >> 16) & 0xFF, (ip_src >> 8) & 0xFF,
+                 ip_src & 0xFF);
 }
 
 int
@@ -627,8 +627,8 @@ onvm_pkt_generate_tcp(struct rte_mempool* pktmbuf_pool, struct rte_tcp_hdr* tcp_
         iph->total_length = rte_cpu_to_be_16(payload_len + option_len + sizeof(struct rte_tcp_hdr) +
                                              sizeof(struct rte_ipv4_hdr) - sizeof(struct rte_ether_hdr));
         printf("Pkt len %d, total iph len %lu\n", pkt->pkt_len,
-               payload_len + option_len + sizeof(struct rte_tcp_hdr) +
-               sizeof(struct rte_ipv4_hdr) - sizeof(struct rte_ether_hdr));
+               payload_len + option_len + sizeof(struct rte_tcp_hdr) + sizeof(struct rte_ipv4_hdr) -
+                   sizeof(struct rte_ether_hdr));
 
         /* Handle checksuming */
         onvm_pkt_set_checksums(pkt);

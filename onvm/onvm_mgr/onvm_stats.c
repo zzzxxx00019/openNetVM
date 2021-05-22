@@ -340,12 +340,12 @@ onvm_stats_display_ports(unsigned difftime, uint8_t verbosity_level) {
                 nic_tx_pps = (nic_tx_pkts - tx_last[i]) / difftime;
 
                 if (verbosity_level == ONVM_RAW_STATS_DUMP) {
-                        fprintf(stats_out, ONVM_STATS_RAW_DUMP_PORTS_CONTENT, buffer,
-                                (unsigned)ports->id[i], nic_rx_pkts, nic_rx_pps, nic_tx_pkts, nic_tx_pps);
+                        fprintf(stats_out, ONVM_STATS_RAW_DUMP_PORTS_CONTENT, buffer, (unsigned)ports->id[i],
+                                nic_rx_pkts, nic_rx_pps, nic_tx_pkts, nic_tx_pps);
 
                 } else {
-                        fprintf(stats_out, ONVM_STATS_REG_PORTS,
-                                (unsigned)ports->id[i], nic_rx_pkts, nic_rx_pps, nic_tx_pkts, nic_tx_pps);
+                        fprintf(stats_out, ONVM_STATS_REG_PORTS, (unsigned)ports->id[i], nic_rx_pkts, nic_rx_pps,
+                                nic_tx_pkts, nic_tx_pps);
                 }
 
                 /* Only print this information out if we haven't already printed it to the console above */
@@ -383,7 +383,7 @@ onvm_stats_display_client_wakeup_thread_context(int difftime) {
         }
 
         wakeup_rate = (num_wakeups - prev_num_wakeups) / difftime;
-        fprintf(stats_out, "Total wakeups = %"PRIu64", Wakeup rate = %"PRIu64"\n", num_wakeups, wakeup_rate);
+        fprintf(stats_out, "Total wakeups = %" PRIu64 ", Wakeup rate = %" PRIu64 "\n", num_wakeups, wakeup_rate);
 }
 
 static void
@@ -464,6 +464,8 @@ onvm_stats_display_nfs(unsigned difftime, uint8_t verbosity_level) {
                 const uint64_t wakeup_rate = (num_wakeups - prev_num_wakeups) / difftime;
                 char state;
 
+		nfs[i].stats.rx_pps = 0;
+
                 uint8_t active = 0;
                 if (ONVM_NF_SHARE_CORES)
                         active = rte_atomic16_read(nf_wakeup_infos[i].shm_server);
@@ -492,25 +494,22 @@ onvm_stats_display_nfs(unsigned difftime, uint8_t verbosity_level) {
                 }
 
                 if (verbosity_level == ONVM_RAW_STATS_DUMP) {
-                        fprintf(stats_out, ONVM_STATS_RAW_DUMP_CONTENT,
-                                buffer, nfs[i].tag, nfs[i].instance_id, nfs[i].service_id, nfs[i].thread_info.core,
-                                nfs[i].thread_info.parent, state, rte_atomic16_read(&nfs[i].thread_info.children_cnt),
-                                rx, tx, rx_pps, tx_pps, rx_drop, tx_drop, rx_drop_rate, tx_drop_rate,
-                                act_out, act_tonf, act_drop, act_next, act_buffer, act_returned,
-                                num_wakeups, wakeup_rate);
+                        fprintf(stats_out, ONVM_STATS_RAW_DUMP_CONTENT, buffer, nfs[i].tag, nfs[i].instance_id,
+                                nfs[i].service_id, nfs[i].thread_info.core, nfs[i].thread_info.parent, state,
+                                rte_atomic16_read(&nfs[i].thread_info.children_cnt), rx, tx, rx_pps, tx_pps, rx_drop,
+                                tx_drop, rx_drop_rate, tx_drop_rate, act_out, act_tonf, act_drop, act_next, act_buffer,
+                                act_returned, num_wakeups, wakeup_rate);
                 } else if (verbosity_level == 2) {
-                        fprintf(stats_out, ONVM_STATS_ADV_CONTENT,
-                                nfs[i].tag, nfs[i].instance_id, nfs[i].service_id, nfs[i].thread_info.core,
-                                rx_pps, tx_pps, rx, tx, act_out, act_tonf, act_drop,
+                        fprintf(stats_out, ONVM_STATS_ADV_CONTENT, nfs[i].tag, nfs[i].instance_id, nfs[i].service_id,
+                                nfs[i].thread_info.core, rx_pps, tx_pps, rx, tx, act_out, act_tonf, act_drop,
                                 nfs[i].thread_info.parent, state, rte_atomic16_read(&nfs[i].thread_info.children_cnt),
                                 rx_drop_rate, tx_drop_rate, rx_drop, tx_drop, act_next, act_buffer, act_returned);
                         if (ONVM_NF_SHARE_CORES)
                                 fprintf(stats_out, ONVM_STATS_SHARED_CORE_CONTENT, num_wakeups, wakeup_rate);
                         fprintf(stats_out, "\n");
                 } else {
-                        fprintf(stats_out, ONVM_STATS_REG_CONTENT,
-                                nfs[i].tag, nfs[i].instance_id, nfs[i].service_id, nfs[i].thread_info.core,
-                                rx_pps, tx_pps, rx_drop, tx_drop, act_out, act_tonf, act_drop);
+                        fprintf(stats_out, ONVM_STATS_REG_CONTENT, nfs[i].tag, nfs[i].instance_id, nfs[i].service_id,
+                                nfs[i].thread_info.core, rx_pps, tx_pps, rx_drop, tx_drop, act_out, act_tonf, act_drop);
                 }
                 /* Only print this information out if we haven't already printed it to the console above */
                 if (stats_out != stdout && stats_out != stderr) {
@@ -525,8 +524,7 @@ onvm_stats_display_nfs(unsigned difftime, uint8_t verbosity_level) {
                         cJSON_AddNumberToObject(onvm_json_nf_stats[i], "TX_Drop_Rate", tx_drop_rate);
                         cJSON_AddNumberToObject(onvm_json_nf_stats[i], "RX_Drop_Rate", rx_drop_rate);
                         cJSON_AddNumberToObject(onvm_json_nf_stats[i], "service_id", (int16_t)nfs[i].service_id);
-                        cJSON_AddNumberToObject(onvm_json_nf_stats[i], "instance_id",
-                                                (int16_t)nfs[i].instance_id);
+                        cJSON_AddNumberToObject(onvm_json_nf_stats[i], "instance_id", (int16_t)nfs[i].instance_id);
                         cJSON_AddNumberToObject(onvm_json_nf_stats[i], "core", (int16_t)nfs[i].thread_info.core);
 
                         free(nf_label);
@@ -551,17 +549,18 @@ onvm_stats_display_nfs(unsigned difftime, uint8_t verbosity_level) {
                         if (nfs_for_service == 0)
                                 continue;
                         if (verbosity_level == 2) {
-                                fprintf(stats_out, ONVM_STATS_ADV_TOTALS,
-                                    i, nfs_for_service, nf_count, rx_pps_for_service[i], tx_pps_for_service[i],
-                                    rx_for_service[i], tx_for_service[i], act_out_for_service[i],
-                                    act_tonf_for_service[i], act_drop_for_service[i], rx_drop_rate_for_service[i],
-                                    tx_drop_rate_for_service[i], rx_drop_for_service[i], tx_drop_for_service[i],
-                                    act_next_for_service[i], act_buffer_for_service[i], act_returned_for_service[i]);
+                                fprintf(stats_out, ONVM_STATS_ADV_TOTALS, i, nfs_for_service, nf_count,
+                                        rx_pps_for_service[i], tx_pps_for_service[i], rx_for_service[i],
+                                        tx_for_service[i], act_out_for_service[i], act_tonf_for_service[i],
+                                        act_drop_for_service[i], rx_drop_rate_for_service[i],
+                                        tx_drop_rate_for_service[i], rx_drop_for_service[i], tx_drop_for_service[i],
+                                        act_next_for_service[i], act_buffer_for_service[i],
+                                        act_returned_for_service[i]);
                         } else {
-                                fprintf(stats_out, ONVM_STATS_REG_TOTALS,
-                                        i, nfs_for_service, nf_count, rx_pps_for_service[i], tx_pps_for_service[i],
-                                        rx_drop_for_service[i], tx_drop_for_service[i], act_out_for_service[i],
-                                        act_tonf_for_service[i], act_drop_for_service[i]);
+                                fprintf(stats_out, ONVM_STATS_REG_TOTALS, i, nfs_for_service, nf_count,
+                                        rx_pps_for_service[i], tx_pps_for_service[i], rx_drop_for_service[i],
+                                        tx_drop_for_service[i], act_out_for_service[i], act_tonf_for_service[i],
+                                        act_drop_for_service[i]);
                         }
                 }
         }
@@ -571,7 +570,6 @@ onvm_stats_display_nfs(unsigned difftime, uint8_t verbosity_level) {
                 fprintf(stats_out, "-----------------\n");
                 onvm_stats_display_client_wakeup_thread_context(difftime);
         }
-
 }
 
 /***************************Helper functions**********************************/

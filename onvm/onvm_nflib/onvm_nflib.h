@@ -84,7 +84,7 @@ onvm_nflib_init_nf_function_table(void);
  *   Function pointer to an optional NF specific signal handler function,
  *   that will be called after the default onvm signal handler.
  * @return
- * Error code or 0 if succesfull 
+ * Error code or 0 if succesfull
  */
 int
 onvm_nflib_start_signal_handler(struct onvm_nf_local_ctx *nf_local_ctx, handle_signal_func signal_hanlder);
@@ -271,12 +271,12 @@ int
 onvm_nflib_request_lpm(struct lpm_request *req);
 
 /*
- * Initializes a flow_tables hashmap. Returns the status code, representing the success or failure of the initialization 
+ * Initializes a flow_tables hashmap. Returns the status code, representing the success or failure of the initialization
  *
  * @param rte_hash_parameters
  *  A hash_params struct containing the properly initialized properties of the hashmap
  * @return
- *  Status of the intitialization  
+ *  Status of the intitialization
  */
 int
 onvm_nflib_request_ft(struct rte_hash_parameters *ipv4_hash_params);
@@ -297,4 +297,4 @@ onvm_nflib_get_onvm_config(void);
 void
 onvm_nflib_stats_summary_output(uint16_t id);
 
-#endif // _ONVM_NFLIB_H_
+#endif  // _ONVM_NFLIB_H_

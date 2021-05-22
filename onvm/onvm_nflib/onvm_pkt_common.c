@@ -47,7 +47,55 @@
 ******************************************************************************/
 
 #include "onvm_pkt_common.h"
+
+#define _experiment
+
+sem_t *onvm_pkt_mutex[16];
+sem_t *onvm_set_action_mutex[16];
+
 /**********************Internal Functions Prototypes**************************/
+
+inline uint8_t
+onvm_pkt_set_meta_bit(uint8_t flags, uint8_t n) {
+        return (flags | (1 << (n)));
+}
+
+inline uint8_t
+onvm_pkt_check_meta_bit(uint8_t flags, uint8_t n) {
+        return ((flags >> (n)) & 1);
+}
+
+inline uint8_t
+onvm_pkt_clear_meta_bit(uint8_t flags, uint8_t n) {
+        return ((flags ^ (1 << (n))) & flags);
+}
+
+#ifdef _experiment
+/*
+ * Check RX is free for packet
+ * Drop the TX queue when destination RX is not enought
+ */
+static void
+onvm_pkt_check_buffer_free(struct queue_mgr *tx_mgr, struct onvm_nf *source_nf);
+#endif
+
+/*
+ * Function to enqueue multi NF
+ * Check all of NF is available
+ */
+static inline void
+onvm_pkt_enqueue_multi_nf(struct queue_mgr *tx_mgr, uint8_t dst_service, struct rte_mbuf *pkt,
+                          struct onvm_nf *source_nf);
+
+#ifdef _experiment
+/*
+ * Function to drop all of packet in tx queue
+ * When a instance is overloading
+ * Drop the packets before enqueue to the instance
+ */
+static void
+onvm_pkt_drop_nf_queue(struct queue_mgr *tx_mgr, uint16_t nf_id, struct onvm_nf *source_nf);
+#endif
 
 /*
  * Function to enqueue a packet on one port's queue.
@@ -83,6 +131,20 @@ static int
 onvm_pkt_drop(struct rte_mbuf *pkt);
 
 /*
+ * Initialize set action mutex
+ * This mutex will helpful for parallelization
+ */
+void
+onvm_init_set_action_mutex(void);
+
+/*
+ * Initialize pkt mutex
+ * This mutex will helpful for parallelization
+ */
+void
+onvm_init_pkt_mutex(void);
+
+/*
  * Set packet meta action and destination
  * This API will check priority when run parallel
  *
@@ -93,17 +155,11 @@ onvm_pkt_drop(struct rte_mbuf *pkt);
 int
 onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination);
 
-/*
- * Get packet's mutex to avoid race conditions
- */
-inline sem_t *
-onvm_get_pkt_mutex(int mutex_id);
-
 /**********************************Interfaces*********************************/
 
 void
 onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uint16_t tx_count, struct onvm_nf *nf) {
-        uint16_t i, j;
+        uint16_t i;
         struct onvm_pkt_meta *meta;
         struct packet_buf *out_buf;
 
@@ -114,8 +170,8 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                 meta = (struct onvm_pkt_meta *)&(((struct rte_mbuf *)pkts[i])->udata64);
                 meta->src = nf->instance_id;
 
-                if (meta->has_mutex) {
-                        sem_t *pkt_mutex = onvm_get_pkt_mutex(pkts[i]->hash.rss % 10);
+                if (onvm_pkt_check_meta_bit(meta->flags, PKT_META_GO_PARALLEL)) {
+                        sem_t *pkt_mutex = onvm_pkt_mutex[pkts[i]->hash.rss % 16];
                         sem_wait(pkt_mutex);
                         if (meta->numNF) {
                                 if (--meta->numNF) {
@@ -124,7 +180,7 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                                         continue;
                                 }
                         }
-                        meta->has_mutex = false;
+                        meta->flags = onvm_pkt_clear_meta_bit(meta->flags, PKT_META_GO_PARALLEL);
                         sem_post(pkt_mutex);
                 }
 
@@ -151,16 +207,10 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                                 onvm_pkt_enqueue_port(tx_mgr, meta->destination, pkts[i]);
                         }
                 } else if (meta->action == ONVM_NF_ACTION_PARA) {
-                        uint8_t dst = meta->destination;
-                        meta->has_mutex = true;
-                        meta->numNF = 0;
-                        for (j = 0; j < 16; j++) {
-                                if ((dst >> j) & 1) {
-                                        meta->numNF++;
-                                        nf->stats.act_tonf++;
-                                        onvm_pkt_enqueue_nf(tx_mgr, j, pkts[i], nf);
-                                }
-                        }
+                        meta->flags = onvm_pkt_set_meta_bit(meta->flags, PKT_META_GO_PARALLEL);
+                        onvm_pkt_enqueue_multi_nf(tx_mgr, meta->destination, pkts[i], nf);
+                        nf->stats.act_tonf += meta->numNF;
+
                 } else {
                         printf("ERROR invalid action : this shouldn't happen.\n");
                         onvm_pkt_drop(pkts[i]);
@@ -168,7 +218,7 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                 }
         }
 }
-
+/*
 void
 onvm_pkt_flush_all_nfs(struct queue_mgr *tx_mgr, struct onvm_nf *source_nf) {
         uint16_t i;
@@ -176,78 +226,14 @@ onvm_pkt_flush_all_nfs(struct queue_mgr *tx_mgr, struct onvm_nf *source_nf) {
         if (tx_mgr == NULL)
                 return;
 
+#ifdef _experiment
+        onvm_pkt_check_buffer_free(tx_mgr, source_nf);
+#else
         for (i = 0; i < MAX_NFS; i++)
                 onvm_pkt_flush_nf_queue(tx_mgr, i, source_nf);
+#endif
 }
-
-void
-onvm_pkt_flush_nf_queue(struct queue_mgr *tx_mgr, uint16_t nf_id, struct onvm_nf *source_nf) {
-        uint16_t i;
-        struct onvm_nf *nf;
-        struct packet_buf *nf_buf;
-
-        if (tx_mgr == NULL)
-                return;
-
-        nf_buf = &tx_mgr->nf_rx_bufs[nf_id];
-        if (nf_buf->count == 0)
-                return;
-
-        nf = &nfs[nf_id];
-
-        // Ensure destination NF is running and ready to receive packets
-        if (!onvm_nf_is_valid(nf))
-                return;
-
-        if (rte_ring_enqueue_bulk(nf->rx_q, (void **)nf_buf->buffer, nf_buf->count, NULL) == 0) {
-                for (i = 0; i < nf_buf->count; i++) {
-                        onvm_pkt_drop(nf_buf->buffer[i]);
-                }
-                nf->stats.rx_drop += nf_buf->count;
-                if (source_nf != NULL)
-                        source_nf->stats.tx_drop += nf_buf->count;
-        } else {
-                nf->stats.rx += nf_buf->count;
-                if (source_nf != NULL)
-                        source_nf->stats.tx += nf_buf->count;
-        }
-        nf_buf->count = 0;
-}
-
-void
-onvm_pkt_enqueue_nf(struct queue_mgr *tx_mgr, uint16_t dst_service_id, struct rte_mbuf *pkt,
-                    struct onvm_nf *source_nf) {
-        struct onvm_nf *nf;
-        uint16_t dst_instance_id;
-        struct packet_buf *nf_buf;
-
-        if (tx_mgr == NULL || pkt == NULL)
-                return;
-
-        // map service to instance and check one exists
-        dst_instance_id = onvm_sc_service_to_nf_map(dst_service_id, pkt);
-        if (dst_instance_id == 0) {
-                onvm_pkt_drop(pkt);
-                if (source_nf != NULL)
-                        source_nf->stats.tx_drop++;
-                return;
-        }
-
-        // Ensure destination NF is running and ready to receive packets
-        nf = &nfs[dst_instance_id];
-        if (!onvm_nf_is_valid(nf)) {
-                onvm_pkt_drop(pkt);
-                if (source_nf != NULL)
-                        source_nf->stats.tx_drop++;
-                return;
-        }
-
-        nf_buf = &tx_mgr->nf_rx_bufs[dst_instance_id];
-        nf_buf->buffer[nf_buf->count++] = pkt;
-        if (nf_buf->count == PACKET_READ_SIZE) {
-                onvm_pkt_flush_nf_queue(tx_mgr, dst_instance_id, source_nf);
-        }
-}
+*/
 
 void
 onvm_pkt_flush_port_queue(struct queue_mgr *tx_mgr, uint16_t port) {
@@ -328,9 +314,9 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
         } else {
                 meta->action = ONVM_NF_ACTION_DROP;
         }
-
-        if (meta->has_mutex) {
-                sem_t *pkt_mutex = onvm_get_pkt_mutex(pkt->hash.rss % 10);
+#ifdef _experiment
+        if (onvm_pkt_check_meta_bit(meta->flags, PKT_META_GO_PARALLEL)) {
+                sem_t *pkt_mutex = onvm_pkt_mutex[pkt->hash.rss % 16];
                 sem_wait(pkt_mutex);
                 if (meta->numNF) {
                         if (--meta->numNF) {
@@ -339,10 +325,10 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
                                 return;
                         }
                 }
-                meta->has_mutex = false;
+                meta->flags = onvm_pkt_clear_meta_bit(meta->flags, PKT_META_GO_PARALLEL);
                 sem_post(pkt_mutex);
         }
-
+#endif
         switch (meta->action) {
                 case ONVM_NF_ACTION_DROP:
                         // if the packet is drop, then <return value> is 0
@@ -358,17 +344,8 @@ onvm_pkt_process_next_action(struct queue_mgr *tx_mgr, struct rte_mbuf *pkt, str
                         onvm_pkt_enqueue_port(tx_mgr, meta->destination, pkt);
                         break;
                 case ONVM_NF_ACTION_PARA:
-                        meta->has_mutex = true;
-                        meta->numNF = 0;
-                        int dst = meta->destination;
-                        for (int j = 0; j < 16; j++) {
-                                if ((dst >> j) & 1) {
-                                        meta->numNF++;
-                                        nf->stats.act_tonf++;
-                                        onvm_pkt_enqueue_nf(tx_mgr, j, pkt, nf);
-                                }
-                        }
-
+                        /* TO DO, Fix the bug of overloading */
+                        break;
                 default:
                         break;
         }
@@ -391,9 +368,8 @@ onvm_pkt_drop(struct rte_mbuf *pkt) {
 int
 onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination) {
         struct onvm_pkt_meta *meta = onvm_get_pkt_meta(pkt);
-
-        if (meta->has_mutex) {
-                sem_t *pkt_mutex = onvm_get_pkt_mutex(pkt->hash.rss % 10);
+        if (onvm_pkt_check_meta_bit(meta->flags, PKT_META_GO_PARALLEL)) {
+                sem_t *pkt_mutex = onvm_set_action_mutex[pkt->hash.rss % 16];
                 sem_wait(pkt_mutex);
                 if (action > meta->action) {
                         meta->action = action;
@@ -408,29 +384,236 @@ onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination) {
         return 0;
 }
 
-inline sem_t *
-onvm_get_pkt_mutex(int mutex_id) {
-        switch (mutex_id) {
-                case 0:
-                        return sem_open("pkt_mutex0", 0);
-                case 1:
-                        return sem_open("pkt_mutex1", 0);
-                case 2:
-                        return sem_open("pkt_mutex2", 0);
-                case 3:
-                        return sem_open("pkt_mutex3", 0);
-                case 4:
-                        return sem_open("pkt_mutex4", 0);
-                case 5:
-                        return sem_open("pkt_mutex5", 0);
-                case 6:
-                        return sem_open("pkt_mutex6", 0);
-                case 7:
-                        return sem_open("pkt_mutex7", 0);
-                case 8:
-                        return sem_open("pkt_mutex8", 0);
-                case 9:
-                        return sem_open("pkt_mutex9", 0);
+/*******************************Mutex init************************************/
+inline void
+onvm_init_pkt_mutex(void) {
+        onvm_pkt_mutex[0] = sem_open("pkt_mutex0", 0);
+        onvm_pkt_mutex[1] = sem_open("pkt_mutex1", 0);
+        onvm_pkt_mutex[2] = sem_open("pkt_mutex2", 0);
+        onvm_pkt_mutex[3] = sem_open("pkt_mutex3", 0);
+        onvm_pkt_mutex[4] = sem_open("pkt_mutex4", 0);
+        onvm_pkt_mutex[5] = sem_open("pkt_mutex5", 0);
+        onvm_pkt_mutex[6] = sem_open("pkt_mutex6", 0);
+        onvm_pkt_mutex[7] = sem_open("pkt_mutex7", 0);
+        onvm_pkt_mutex[8] = sem_open("pkt_mutex8", 0);
+        onvm_pkt_mutex[9] = sem_open("pkt_mutex9", 0);
+        onvm_pkt_mutex[10] = sem_open("pkt_mutex10", 0);
+        onvm_pkt_mutex[11] = sem_open("pkt_mutex11", 0);
+        onvm_pkt_mutex[12] = sem_open("pkt_mutex12", 0);
+        onvm_pkt_mutex[13] = sem_open("pkt_mutex13", 0);
+        onvm_pkt_mutex[14] = sem_open("pkt_mutex14", 0);
+        onvm_pkt_mutex[15] = sem_open("pkt_mutex15", 0);
+}
+
+inline void
+onvm_init_set_action_mutex(void) {
+        onvm_set_action_mutex[0] = sem_open("set_action_mutex0", 0);
+        onvm_set_action_mutex[1] = sem_open("set_action_mutex1", 0);
+        onvm_set_action_mutex[2] = sem_open("set_action_mutex2", 0);
+        onvm_set_action_mutex[3] = sem_open("set_action_mutex3", 0);
+        onvm_set_action_mutex[4] = sem_open("set_action_mutex4", 0);
+        onvm_set_action_mutex[5] = sem_open("set_action_mutex5", 0);
+        onvm_set_action_mutex[6] = sem_open("set_action_mutex6", 0);
+        onvm_set_action_mutex[7] = sem_open("set_action_mutex7", 0);
+        onvm_set_action_mutex[8] = sem_open("set_action_mutex8", 0);
+        onvm_set_action_mutex[9] = sem_open("set_action_mutex9", 0);
+        onvm_set_action_mutex[10] = sem_open("set_action_mutex10", 0);
+        onvm_set_action_mutex[11] = sem_open("set_action_mutex11", 0);
+        onvm_set_action_mutex[12] = sem_open("set_action_mutex12", 0);
+        onvm_set_action_mutex[13] = sem_open("set_action_mutex13", 0);
+        onvm_set_action_mutex[14] = sem_open("set_action_mutex14", 0);
+        onvm_set_action_mutex[15] = sem_open("set_action_mutex15", 0);
+}
+
+/*******************************packet enqueue nf*****************************/
+static inline void
+onvm_pkt_enqueue_multi_nf(struct queue_mgr *tx_mgr, uint8_t dst_service, struct rte_mbuf *pkt,
+                          struct onvm_nf *source_nf) {
+        struct onvm_nf *nf;
+        uint8_t i;
+        uint32_t dst_service_id[10];
+        uint16_t dst_instance_id[10];
+        uint16_t dst_counter = 0;
+
+        if (tx_mgr == NULL || pkt == NULL)
+                return;
+
+        for (i = 0; i < 8; i++) {
+                if (((dst_service >> i) & 1)) {
+                        dst_service_id[dst_counter++] = i;
+                }
         }
-        return NULL;
+        for (i = 0; i < dst_counter; i++) {
+                dst_instance_id[i] = onvm_sc_service_to_nf_map(dst_service_id[i], pkt);
+                if (dst_instance_id[i] == 0) {
+                        onvm_pkt_drop(pkt);
+                        if (source_nf != NULL)
+                                source_nf->stats.tx_drop++;
+                        return;
+                } else {
+                        nf = &nfs[dst_instance_id[i]];
+                        if (!onvm_nf_is_valid(nf)) {
+                                onvm_pkt_drop(pkt);
+                                if (source_nf != NULL)
+                                        source_nf->stats.tx_drop++;
+                                return;
+                        }
+                }
+        }
+
+        struct packet_buf *nf_buf;
+        for (uint8_t i = 0; i < dst_counter; i++) {
+                nf_buf = &tx_mgr->nf_rx_bufs[dst_instance_id[i]];
+                nf_buf->buffer[nf_buf->count++] = pkt;
+                if (nf_buf->count == PACKET_READ_SIZE) {
+                        onvm_pkt_flush_all_nfs(tx_mgr, source_nf);
+                }
+        }
+        return;
+}
+
+void
+onvm_pkt_enqueue_nf(struct queue_mgr *tx_mgr, uint16_t dst_service_id, struct rte_mbuf *pkt,
+                    struct onvm_nf *source_nf) {
+        struct onvm_nf *nf;
+        uint16_t dst_instance_id;
+        struct packet_buf *nf_buf;
+
+        if (tx_mgr == NULL || pkt == NULL)
+                return;
+
+        // map service to instance and check one exists
+        dst_instance_id = onvm_sc_service_to_nf_map(dst_service_id, pkt);
+        if (dst_instance_id == 0) {
+                onvm_pkt_drop(pkt);
+                if (source_nf != NULL)
+                        source_nf->stats.tx_drop++;
+                return;
+        }
+
+        // Ensure destination NF is running and ready to receive packets
+        nf = &nfs[dst_instance_id];
+        if (!onvm_nf_is_valid(nf)) {
+                onvm_pkt_drop(pkt);
+                if (source_nf != NULL)
+                        source_nf->stats.tx_drop++;
+                return;
+        }
+
+        nf_buf = &tx_mgr->nf_rx_bufs[dst_instance_id];
+        nf_buf->buffer[nf_buf->count++] = pkt;
+        if (nf_buf->count == PACKET_READ_SIZE) {
+                onvm_pkt_flush_nf_queue(tx_mgr, dst_instance_id, source_nf);
+        }
+}
+
+/*******************************packet buffer check***************************/
+#ifdef _experiment
+static void
+onvm_pkt_check_buffer_free(struct queue_mgr *tx_mgr, struct onvm_nf *source_nf) {
+        struct packet_buf *nf_buf;
+        struct onvm_nf *nf;
+        bool drop_flag = false;
+        uint16_t NF_counter = 0;
+        uint16_t instance_id[10];
+        // Check rx_q buffer is ready and available to reveive
+        for (uint16_t i = 0; i < MAX_NFS; i++) {
+                nf_buf = &tx_mgr->nf_rx_bufs[i];
+                if (nf_buf->count != 0) {
+                        nf = &nfs[i];
+                        if (drop_flag == false && rte_ring_free_count(nf->rx_q) < (nf_buf->count + 100))
+                                drop_flag = true;
+                        instance_id[NF_counter++] = i;
+                }
+        }
+        // Only do when go parallel
+        if (drop_flag == true && NF_counter > 1) {
+                for (uint16_t i = 0; i < NF_counter; i++) {
+                        onvm_pkt_drop_nf_queue(tx_mgr, instance_id[i], source_nf);
+                }
+        }
+}
+#endif
+
+#ifdef _experiment
+static void
+onvm_pkt_drop_nf_queue(struct queue_mgr *tx_mgr, uint16_t nf_id, struct onvm_nf *source_nf) {
+        struct onvm_nf *nf;
+        struct packet_buf *nf_buf;
+
+        if (tx_mgr == NULL)
+                return;
+
+        nf_buf = &tx_mgr->nf_rx_bufs[nf_id];
+        if (nf_buf->count == 0)
+                return;
+
+        nf = &nfs[nf_id];
+        if (onvm_nf_is_valid(nf)) {
+                nf->stats.rx_drop += nf_buf->count;
+        }
+        if (source_nf != NULL) {
+                source_nf->stats.tx_drop += nf_buf->count;
+        }
+        nf_buf->count = 0;
+}
+#endif
+
+/*******************************packet buffer flush***************************/
+void
+onvm_pkt_flush_all_nfs(struct queue_mgr *tx_mgr, struct onvm_nf *source_nf) {
+        uint16_t i;
+
+        if (tx_mgr == NULL)
+                return;
+
+        onvm_pkt_check_buffer_free(tx_mgr, source_nf);
+
+        for (i = 0; i < MAX_NFS; i++)
+                onvm_pkt_flush_nf_queue(tx_mgr, i, source_nf);
+}
+
+void
+onvm_pkt_flush_nf_queue(struct queue_mgr *tx_mgr, uint16_t nf_id, struct onvm_nf *source_nf) {
+        uint16_t i;
+        struct onvm_nf *nf;
+        struct packet_buf *nf_buf;
+
+        if (tx_mgr == NULL)
+                return;
+
+        nf_buf = &tx_mgr->nf_rx_bufs[nf_id];
+        if (nf_buf->count == 0)
+                return;
+
+        nf = &nfs[nf_id];
+
+        // Ensure destination NF is running and ready to receive packets
+        if (!onvm_nf_is_valid(nf))
+                return;
+
+        if (rte_ring_mp_enqueue_bulk(nf->rx_q, (void **)nf_buf->buffer, nf_buf->count, NULL) == 0) {
+                /*
+                for (i = 0; i < nf_buf->count; i++) {
+                                                //struct rte_mbuf *pkt = nf_buf->buffer[i];
+                                                //struct onvm_pkt_meta *meta = (struct onvm_pkt_meta *)&pkt->udata64;
+                                                //if (!onvm_pkt_check_meta_bit(meta->flags, PKT_META_ENQUEUE_DONE))
+                                                //		onvm_pkt_drop(pkt);
+                                                onvm_pkt_drop(nf_buf->buffer[i]);
+                }
+                */
+                nf->stats.rx_drop += nf_buf->count;
+                if (source_nf != NULL)
+                        source_nf->stats.tx_drop += nf_buf->count;
+        } else {
+                for (i = 0; i < nf_buf->count; i++) {
+                        struct rte_mbuf *pkt = nf_buf->buffer[i];
+                        struct onvm_pkt_meta *meta = (struct onvm_pkt_meta *)&pkt->udata64;
+                        meta->numNF = onvm_pkt_check_meta_bit(meta->flags, PKT_META_GO_PARALLEL) ? meta->numNF + 1 : 0;
+                }
+                nf->stats.rx += nf_buf->count;
+                if (source_nf != NULL)
+                        source_nf->stats.tx += nf_buf->count;
+        }
+        nf_buf->count = 0;
 }

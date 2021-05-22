@@ -68,31 +68,10 @@ parse_app_args(int argc, char *argv[], const char *progname) {
 static int
 packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
-        struct rte_mbuf *handle_pkt = NULL;
-        bool copy_flag = false;
+        (void) meta;
 
-        // If packet has conflict, need to clone when handling
-        if (meta->payload_write) {
-                copy_flag = true;
-                handle_pkt = rte_pktmbuf_clone(pkt, pktmbuf_pool);
-                meta->payload_read = false;
-                if (!handle_pkt) {
-                        printf("Packet clone fail...\n");
-                        return 0;
-                }
-        } else {
-                handle_pkt = pkt;
-        }
-        // Handle the packet
-        //onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, 5);
-	meta->action = ONVM_NF_ACTION_TONF;
-	meta->destination = 5;
-	rte_delay_us_block(1);
-
-        // If packet is be copied, need to free the memory
-        if (copy_flag == true) {
-                rte_pktmbuf_free(handle_pkt);
-        }
+	onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, 3);
+	//rte_delay_us_block(1);
 
         return 0;
 }
@@ -131,12 +110,14 @@ main(int argc, char *argv[]) {
         cur_cycles = rte_get_tsc_cycles();
         last_cycle = rte_get_tsc_cycles();
 
-        pktmbuf_pool = rte_mempool_lookup(PKTMBUF_CLONE_POOL_NAME);
-	
+        pktmbuf_pool = rte_mempool_lookup(PKTMBUF_CLONE_POOL_NAME);	
 	if (pktmbuf_pool == NULL) {
                 onvm_nflib_stop(nf_local_ctx);
                 rte_exit(EXIT_FAILURE, "Cannot find mbuf pool!\n");
         }
+
+	struct onvm_nf *parent_nf = nf_local_ctx->nf;
+	parent_nf->handle_rate = 700000;
 
         onvm_nflib_run(nf_local_ctx);
 

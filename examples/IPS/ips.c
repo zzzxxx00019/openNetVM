@@ -6,28 +6,64 @@
 #include "ips_common.h"
 #include "parse_rules.h"
 
-#define PKTMBUF_POOL_NAME "MProc_pktmbuf_pool"
 #define NF_TAG "IPS"
 
 extern struct port_info *ports;
 struct rte_mempool *pktmbuf_pool;
 
 /* user defined settings */
-string patternFile = "rules/snort3-community.rules";
+// string patternFile = "rules/snort3-community.rules";
+string logFile = "logs/log.txt";
+string patternFile = "rules/snort3-http.rules";
 static uint32_t destination = (uint16_t)-1;
 
 // Shared Library
 RulesHashMp *Rules;
 
+static void
+usage(const char *prog) {
+        cerr << "Usage: " << prog << " ./go.sh [From] -d [To]" << endl;
+}
+
 static int
 parse_app_args(int argc, char *argv[], const char *progname) {
-        return 0;
+        int c;
+        while ((c = getopt(argc, argv, "d:w")) != -1) {
+                switch (c) {
+                        case 'w':  // not need for now
+                                break;
+                        case 'd':
+                                destination = strtoul(optarg, NULL, 10);
+                                RTE_LOG(INFO, APP, "destination nf = %d\n", destination);
+                                break;
+                        case '?':  // Fall through
+                        default:
+                                usage(progname);
+                                return -1;
+                }
+        }
+        return optind;
 }
 
 // Process packet
 static int
 packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta, struct onvm_nf_local_ctx *nf_local_ctx) {
-        struct onvm_nf *nf = nf_local_ctx->nf;
+        Flow *parser = (Flow *)nf_local_ctx->nf->data;
+        parser->scanFlow(pkt);
+        // Drop
+        if (parser->drop()) {
+                onvm_pkt_set_action(pkt, ONVM_NF_ACTION_DROP, 0);
+                return 0;
+        }
+        // Pass
+        if (destination != (uint16_t)-1) {
+                onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, destination);
+        } else {
+                if (onvm_pkt_swap_src_mac_addr(pkt, meta->destination, ports) != 0) {
+                        RTE_LOG(INFO, APP, "ERROR: Failed to swap src mac with dst mac!\n");
+                }
+                onvm_pkt_set_action(pkt, ONVM_NF_ACTION_OUT, pkt->port);
+        }
         return 0;
 }
 
@@ -75,7 +111,7 @@ main(int argc, char **argv) {
                 rte_exit(EXIT_FAILURE, "Invalid command-line arguments\n");
         }
 
-        pktmbuf_pool = rte_mempool_lookup(PKTMBUF_POOL_NAME);
+        pktmbuf_pool = rte_mempool_lookup(PKTMBUF_CLONE_POOL_NAME);
 
         if (!pktmbuf_pool) {
                 onvm_nflib_stop(nf_local_ctx);
@@ -84,18 +120,25 @@ main(int argc, char **argv) {
 
         /* Build database from pattern file */
         Rules = databasesFromFile(patternFile.c_str());
-
+        streambuf *backup = clog.rdbuf();
+        ofstream file = ofstream(logFile);
+        clog.rdbuf(file.rdbuf());
         /* Setup cmd interface */
+        /*
         pthread_t cmd_line;  // pthread variable
         if (pthread_create(&cmd_line, NULL, parse_cmd_line, NULL)) {
                 perror("pthread_create error");
         }
         pthread_detach(cmd_line);
+        */
+        struct onvm_nf *parent_nf = nf_local_ctx->nf;
+        parent_nf->handle_rate = 1000000;
 
         onvm_nflib_run(nf_local_ctx);
 
         onvm_nflib_stop(nf_local_ctx);
-
+        clog.rdbuf(backup);
+        file.close();
         printf("If we reach here, program is ending\n");
         return 0;
 }

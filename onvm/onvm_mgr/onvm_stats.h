@@ -58,51 +58,58 @@
 #define ONVM_STR_STATS_WEB "web"
 
 extern const char *NF_MSG[3];
-#define ONVM_STATS_MSG "\n"\
-        "NF TAG         IID / SID / CORE    rx_pps  /  tx_pps        rx_drop  /  tx_drop           out   /    tonf     /   drop\n"\
-        "----------------------------------------------------------------------------------------------------------------------\n"
-#define ONVM_STATS_ADV_MSG "\n"\
-        "NF TAG         IID / SID / CORE    rx_pps  /  tx_pps             rx  /  tx                out   /    tonf     /   drop\n"\
-        "               PNT / S|W / CHLD  drop_pps  /  drop_pps      rx_drop  /  tx_drop           next  /    buf      /   ret\n"\
-        "----------------------------------------------------------------------------------------------------------------------\n"
-#define ONVM_STATS_SHARED_CORE_MSG "\n"\
-        "NF TAG         IID / SID / CORE    rx_pps  /  tx_pps             rx  /  tx                out   /    tonf     /   drop\n"\
-        "               PNT / S|W / CHLD  drop_pps  /  drop_pps      rx_drop  /  tx_drop           next  /    buf      /   ret\n"\
-        "                                  wakeups  /  wakeup_rt\n"\
-        "----------------------------------------------------------------------------------------------------------------------\n"
-#define ONVM_STATS_RAW_DUMP_PORT_MSG \
-        "#YYYY-MM-DD HH:MM:SS,nic_rx_pkts,nic_rx_pps,nic_tx_pkts,nic_tx_pps\n"
-#define ONVM_STATS_RAW_DUMP_NF_MSG \
-        "#YYYY-MM-DD HH:MM:SS,nf_tag,instance_id,service_id,core,parent,state,children_cnt,"\
-        "rx,tx,rx_pps,tx_pps,rx_drop,tx_drop,rx_drop_rate,tx_drop_rate,"\
+#define ONVM_STATS_MSG                                                                                                 \
+        "\n"                                                                                                           \
+        "NF TAG         IID / SID / CORE    rx_pps  /  tx_pps        rx_drop  /  tx_drop           out   /    tonf   " \
+        "  /   drop\n"                                                                                                 \
+        "------------------------------------------------------------------------------------------------------------" \
+        "----------\n"
+#define ONVM_STATS_ADV_MSG                                                                                             \
+        "\n"                                                                                                           \
+        "NF TAG         IID / SID / CORE    rx_pps  /  tx_pps             rx  /  tx                out   /    tonf   " \
+        "  /   drop\n"                                                                                                 \
+        "               PNT / S|W / CHLD  drop_pps  /  drop_pps      rx_drop  /  tx_drop           next  /    buf    " \
+        "  /   ret\n"                                                                                                  \
+        "------------------------------------------------------------------------------------------------------------" \
+        "----------\n"
+#define ONVM_STATS_SHARED_CORE_MSG                                                                                     \
+        "\n"                                                                                                           \
+        "NF TAG         IID / SID / CORE    rx_pps  /  tx_pps             rx  /  tx                out   /    tonf   " \
+        "  /   drop\n"                                                                                                 \
+        "               PNT / S|W / CHLD  drop_pps  /  drop_pps      rx_drop  /  tx_drop           next  /    buf    " \
+        "  /   ret\n"                                                                                                  \
+        "                                  wakeups  /  wakeup_rt\n"                                                    \
+        "------------------------------------------------------------------------------------------------------------" \
+        "----------\n"
+#define ONVM_STATS_RAW_DUMP_PORT_MSG "#YYYY-MM-DD HH:MM:SS,nic_rx_pkts,nic_rx_pps,nic_tx_pkts,nic_tx_pps\n"
+#define ONVM_STATS_RAW_DUMP_NF_MSG                                                           \
+        "#YYYY-MM-DD HH:MM:SS,nf_tag,instance_id,service_id,core,parent,state,children_cnt," \
+        "rx,tx,rx_pps,tx_pps,rx_drop,tx_drop,rx_drop_rate,tx_drop_rate,"                     \
         "act_out,act_tonf,act_drop,act_next,act_buffer,act_returned,num_wakeups,wakeup_rate\n"
-#define ONVM_STATS_REG_CONTENT \
-        "%-14s %2u  /  %-2u / %2u    %9" PRIu64 " / %-9" PRIu64 "   %11" PRIu64 " / %-11" PRIu64\
-        "  %11" PRIu64 " / %-11" PRIu64 " / %-11" PRIu64 " \n"
-#define ONVM_STATS_REG_TOTALS \
-        "SID %-2u %2u%s -                   %9" PRIu64 " / %-9" PRIu64 "   %11" PRIu64\
-        " / %-11" PRIu64 "  %11" PRIu64 " / %-11" PRIu64 " / %-11" PRIu64 "\n"
-#define ONVM_STATS_REG_PORTS \
-        "Port %u - rx: %9" PRIu64 "  (%9" PRIu64 " pps)\t"\
+#define ONVM_STATS_REG_CONTENT                                                                                  \
+        "%-14s %2u  /  %-2u / %2u    %9" PRIu64 " / %-9" PRIu64 "   %11" PRIu64 " / %-11" PRIu64 "  %11" PRIu64 \
+        " / %-11" PRIu64 " / %-11" PRIu64 " \n"
+#define ONVM_STATS_REG_TOTALS                                                                                          \
+        "SID %-2u %2u%s -                   %9" PRIu64 " / %-9" PRIu64 "   %11" PRIu64 " / %-11" PRIu64 "  %11" PRIu64 \
+        " / %-11" PRIu64 " / %-11" PRIu64 "\n"
+#define ONVM_STATS_REG_PORTS                     \
+        "Port %u - rx: %9" PRIu64 "  (%9" PRIu64 \
+        " pps)\t"                                \
         "tx: %9" PRIu64 "  (%9" PRIu64 " pps)\n"
-#define ONVM_STATS_ADV_CONTENT \
-        "%-14s %2u  /  %-2u / %2u    %9" PRIu64 " / %-9" PRIu64 "   %11" PRIu64 " / %-11" PRIu64\
-        "  %11" PRIu64 " / %-11" PRIu64 " / %-11" PRIu64\
-        "\n            %5" PRId16 "  /  %c  /  %u    %9" PRIu64 " / %-9" PRIu64 "   %11" PRIu64 " / %-11" PRIu64\
-        "  %11" PRIu64 " / %-11" PRIu64 " / %-11" PRIu64 "\n"
-#define ONVM_STATS_SHARED_CORE_CONTENT \
-        "                               %11" PRIu64 " / %-11" PRIu64"\n"
-#define ONVM_STATS_ADV_TOTALS \
-        "SID %-2u %2u%s -                   %9" PRIu64 " / %-9" PRIu64 "   %11" PRIu64\
-        " / %-11" PRIu64 "  %11" PRIu64 " / %-11" PRIu64 " / %-11" PRIu64\
-        "\n                                 %9" PRIu64 " / %-9" PRIu64 "   %11" PRIu64\
-        " / %-11" PRIu64 "  %11" PRIu64 " / %-11" PRIu64 " / %-11" PRIu64 "\n"
-#define ONVM_STATS_RAW_DUMP_CONTENT \
-        "%s,%s,%u,%u,%u,%u,%c,%u,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64\
-        ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64\
-        ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 "\n"
-#define ONVM_STATS_RAW_DUMP_PORTS_CONTENT \
-        "%s,%u,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 "\n"
+#define ONVM_STATS_ADV_CONTENT                                                                                    \
+        "%-14s %2u  /  %-2u / %2u    %9" PRIu64 " / %-9" PRIu64 "   %11" PRIu64 " / %-11" PRIu64 "  %11" PRIu64   \
+        " / %-11" PRIu64 " / %-11" PRIu64 "\n            %5" PRId16 "  /  %c  /  %u    %9" PRIu64 " / %-9" PRIu64 \
+        "   %11" PRIu64 " / %-11" PRIu64 "  %11" PRIu64 " / %-11" PRIu64 " / %-11" PRIu64 "\n"
+#define ONVM_STATS_SHARED_CORE_CONTENT "                               %11" PRIu64 " / %-11" PRIu64 "\n"
+#define ONVM_STATS_ADV_TOTALS                                                                                          \
+        "SID %-2u %2u%s -                   %9" PRIu64 " / %-9" PRIu64 "   %11" PRIu64 " / %-11" PRIu64 "  %11" PRIu64 \
+        " / %-11" PRIu64 " / %-11" PRIu64 "\n                                 %9" PRIu64 " / %-9" PRIu64               \
+        "   %11" PRIu64 " / %-11" PRIu64 "  %11" PRIu64 " / %-11" PRIu64 " / %-11" PRIu64 "\n"
+#define ONVM_STATS_RAW_DUMP_CONTENT                                                                                 \
+        "%s,%s,%u,%u,%u,%u,%c,%u,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64  \
+        ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 \
+        "\n"
+#define ONVM_STATS_RAW_DUMP_PORTS_CONTENT "%s,%u,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 "\n"
 
 #define ONVM_STATS_FOPEN_ARGS "w+"
 #define ONVM_STATS_PATH_BASE "../onvm_web/"
@@ -122,7 +129,7 @@ extern const char *NF_MSG[3];
 
 #define ONVM_SNPRINTF(str_, sz_, fmt_, ...)                                                              \
         do {                                                                                             \
-                (str_) = (char*)malloc(sizeof(char) * (sz_));                                            \
+                (str_) = (char *)malloc(sizeof(char) * (sz_));                                           \
                 if (!(str_))                                                                             \
                         rte_exit(-1, "ERROR! [%s,%d]: unable to malloc str.\n", __FUNCTION__, __LINE__); \
                 snprintf((str_), (sz_), (fmt_), __VA_ARGS__);                                            \
@@ -138,12 +145,12 @@ struct onvm_event {
         void *data;
 };
 
-cJSON* onvm_json_root;
-cJSON* onvm_json_port_stats_obj;
-cJSON* onvm_json_nf_stats_obj;
-cJSON* onvm_json_port_stats[RTE_MAX_ETHPORTS];
-cJSON* onvm_json_nf_stats[MAX_NFS];
-cJSON* onvm_json_events_arr;
+cJSON *onvm_json_root;
+cJSON *onvm_json_port_stats_obj;
+cJSON *onvm_json_nf_stats_obj;
+cJSON *onvm_json_port_stats[RTE_MAX_ETHPORTS];
+cJSON *onvm_json_nf_stats[MAX_NFS];
+cJSON *onvm_json_events_arr;
 
 /*********************************Interfaces**********************************/
 

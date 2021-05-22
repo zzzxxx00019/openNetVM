@@ -76,20 +76,21 @@ parse_app_args(int argc, char *argv[], const char *progname) {
 static int
 packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
-       
+	(void) meta;
+	/*       
         if(!onvm_pkt_is_ipv4(pkt)) {
             onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, arp_response);
             return 0;
         }
+	*/
         // When use parallel action, must initial dst to 0 before setting
         uint8_t dst = 0;
-        // Destination 3 is payload read test NF, Set payload_read flag to 1
-        meta->payload_read = true;
-        dst |= (1 << 3);
-        // Destination 4 is payload write test NF, Set payload_write flag to 1
-        meta->payload_write = false;
-        //dst |= (1 << 4);
-        // Destination 5 is l3fwd
+
+        //meta->payload_read = true;
+        //dst |= (1 << 3);
+	//meta->payload_write = true;
+        dst |= (1 << 2);
+        
         //dst |= (1 << 5);
         
         onvm_pkt_set_action(pkt, ONVM_NF_ACTION_PARA, dst);
@@ -127,6 +128,9 @@ main(int argc, char *argv[]) {
                 onvm_nflib_stop(nf_local_ctx);
                 rte_exit(EXIT_FAILURE, "Invalid command-line arguments\n");
         }
+
+	struct onvm_nf *parent_nf = nf_local_ctx->nf;
+	parent_nf->handle_rate = 10000000;
 
         cur_cycles = rte_get_tsc_cycles();
         last_cycle = rte_get_tsc_cycles();

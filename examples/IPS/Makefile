@@ -51,7 +51,7 @@ include $(RTE_SDK)/mk/rte.vars.mk
 APP = IPS
 
 # all source are stored in SRCS-y
-SRCS-y := ips.c parse_rules.c cmd_line.c flow_parser.c tcp_parser.c
+SRCS-y := ips.c parse_rules.c cmd_line.c flow_parser.c tcp_parser.c udp_parser.c icmp_parser.c
 
 # OpenNetVM path
 ONVM= $(SRCDIR)/../../onvm

@@ -68,7 +68,7 @@
 #define MAX_NFS_PER_SERVICE 32   // max number of NFs per service.
 
 #define NUM_MBUFS 32767          // total number of mbufs (2^15 - 1)
-#define NF_QUEUE_RINGSIZE 16384  // size of queue for NFs
+#define NF_QUEUE_RINGSIZE 32768  // size of queue for NFs
 
 #define PACKET_READ_SIZE ((uint16_t)32)
 
@@ -112,15 +112,18 @@
 /* If a lot of children spawned this might need to be increased */
 #define NF_TERM_STOP_ITER_TIMES 10
 
+#define PKT_META_PAYLOAD_READ 0
+#define PKT_META_PAYLOAD_WRITE 1
+#define PKT_META_GO_PARALLEL 2
+#define PKT_META_BEEN_COVER 3
+
 struct onvm_pkt_meta {
-        uint8_t action;      /* Action to be performed */
-        uint8_t destination; /* where to go next */
-        uint8_t src;         /* who processed the packet last */
-        uint8_t chain_index; /*index of the current step in the service chain*/
-        uint8_t numNF;       /* Number of parallel NFs */
-        bool has_mutex;
-        volatile bool payload_read;
-        volatile bool payload_write;
+        uint8_t action;         /* Action to be performed */
+        uint8_t destination;    /* where to go next */
+        uint8_t src;            /* who processed the packet last */
+        uint8_t chain_index;    /*index of the current step in the service chain*/
+        volatile uint8_t numNF; /* Number of parallel NFs */
+        volatile uint8_t flags;
 };
 
 static inline struct onvm_pkt_meta *
@@ -164,7 +167,7 @@ struct tx_thread_info {
  */
 struct packet_buf {
         struct rte_mbuf *buffer[PACKET_READ_SIZE];
-        uint16_t count;
+        unsigned int count;
 };
 
 /*
@@ -279,11 +282,13 @@ struct onvm_nf {
         uint16_t instance_id;
         uint16_t service_id;
         uint16_t idle_time;
+        uint32_t handle_rate;
         uint8_t status;
         char *tag;
         /* Pointer to NF defined state data */
         void *data;
         volatile bool wait_flag;
+        volatile bool overloading_flag;
 
         struct {
                 uint16_t core;
@@ -319,6 +324,7 @@ struct onvm_nf {
          * or transmitted on an actual NIC port.
          */
         struct {
+		volatile uint64_t rx_pps;
                 volatile uint64_t rx;
                 volatile uint64_t rx_drop;
                 volatile uint64_t rx_buffer;

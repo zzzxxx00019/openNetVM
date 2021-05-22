@@ -70,7 +70,7 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
         
         // If packet go parallel, check clone complete before handling
-        while(meta->payload_read);
+        while(pkt!=NULL && meta->payload_read);
         meta->payload_write = false;
 
         // Handle the packet

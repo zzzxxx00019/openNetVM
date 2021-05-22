@@ -63,7 +63,9 @@
 #define NF_TAG "l3switch"
 
 uint32_t hash_entry_number = HASH_ENTRY_NUMBER_DEFAULT;
+#ifdef print_delay
 uint32_t print_delay = 1000000;
+#endif
 int8_t l3fwd_lpm_on = 1;
 int8_t l3fwd_em_on = 0;
 
@@ -91,10 +93,12 @@ parse_app_args(int argc, char *argv[], const char *progname) {
                         case 'h':
                                 hash_entry_number = strtoul(optarg, NULL, 10);
                                 break;
-                        case 'p':
+#ifdef print_stats
+			case 'p':
                                 print_delay = strtoul(optarg, NULL, 10);
                                 break;
-                        case 'e':
+#endif
+			case 'e':
                                 l3fwd_lpm_on = 0;
                                 l3fwd_em_on = 1;
                                 break;
@@ -121,6 +125,7 @@ parse_app_args(int argc, char *argv[], const char *progname) {
  * thread in the server process, when the process is run with more
  * than one lcore enabled.
  */
+#ifdef print_stats
 static void
 print_stats(__attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
         const char clr[] = {27, '[', '2', 'J', '\0'};
@@ -149,7 +154,7 @@ print_stats(__attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
 
         printf("\n\n");
 }
-
+#endif
 /*
  * This function checks for valid ipv4 packets. Updates the
  * src and destination ethernet addresses of packets. It then performs a lookup
@@ -163,11 +168,14 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
 
         struct onvm_nf *nf = nf_local_ctx->nf;
         struct state_info *stats = (struct state_info *)nf->data;
-
+	
+#ifdef print_stats
+	static uint32_t counter = 0;
         if (counter++ == stats->print_delay) {
                 print_stats(nf_local_ctx);
                 counter = 0;
         }
+#endif
         struct rte_ether_hdr *eth_hdr;
         struct ipv4_hdr *ipv4_hdr;
         uint16_t dst_port;
@@ -264,7 +272,9 @@ nf_setup(struct onvm_nf_local_ctx *nf_local_ctx) {
                 onvm_nflib_stop(nf_local_ctx);
                 rte_exit(EXIT_FAILURE, "Unable to initialize NF satas");
         }
+#ifdef print_stats
         stats->print_delay = print_delay;
+#endif
         stats->l3fwd_lpm_on = l3fwd_lpm_on;
         stats->l3fwd_em_on = l3fwd_em_on;
         stats->hash_entry_number = HASH_ENTRY_NUMBER_DEFAULT;
@@ -330,6 +340,8 @@ main(int argc, char *argv[]) {
                 onvm_nflib_stop(nf_local_ctx);
                 rte_exit(EXIT_FAILURE, "No Ethernet ports. Ensure ports binded to dpdk. - bye\n");
         }
+	struct onvm_nf *parent_nf = nf_local_ctx->nf;
+	parent_nf->handle_rate = 10000000;
         onvm_nflib_run(nf_local_ctx);
         rte_lpm_free(lpm_tbl);
         onvm_nflib_stop(nf_local_ctx);

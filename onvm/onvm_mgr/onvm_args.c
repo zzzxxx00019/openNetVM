@@ -370,7 +370,7 @@ parse_stats_output(const char *stats_output) {
 
 static int
 parse_time_to_live(const char *time_to_live) {
-        char* end = NULL;
+        char *end = NULL;
         unsigned long temp;
 
         temp = strtoul(time_to_live, &end, 10);
@@ -383,7 +383,7 @@ parse_time_to_live(const char *time_to_live) {
 
 static int
 parse_packet_limit(const char *pkt_limit) {
-        char* end = NULL;
+        char *end = NULL;
         unsigned long temp;
 
         temp = strtoul(pkt_limit, &end, 10);

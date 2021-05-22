@@ -62,7 +62,7 @@ onvm_ft_create(int cnt, int entry_size) {
         struct onvm_ft *ft;
         int status;
 
-        ipv4_hash_params = (struct rte_hash_parameters *) rte_malloc(NULL, sizeof(struct rte_hash_parameters), 0);
+        ipv4_hash_params = (struct rte_hash_parameters *)rte_malloc(NULL, sizeof(struct rte_hash_parameters), 0);
         if (!ipv4_hash_params) {
                 return NULL;
         }
@@ -91,7 +91,7 @@ onvm_ft_create(int cnt, int entry_size) {
         if (!hash) {
                 return NULL;
         }
-        ft = (struct onvm_ft *) rte_calloc("table", 1, sizeof(struct onvm_ft), 0);
+        ft = (struct onvm_ft *)rte_calloc("table", 1, sizeof(struct onvm_ft), 0);
         if (!ft) {
                 rte_hash_free(hash);
                 return NULL;

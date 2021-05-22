@@ -51,15 +51,16 @@
 #include "onvm_mgr.h"
 #include "onvm_stats.h"
 
-#define high_threshold 10000
-#define low_threshold 2000
-#define Max_Child 6
+#define Max_Child 3
 
 /* ID 0 is reserved */
 uint16_t next_instance_id = 1;
 uint16_t starting_instance_id = 1;
 
 /************************Internal functions prototypes************************/
+static uint64_t
+onvm_nf_quick_multiplication(uint64_t handle_rate, uint32_t multiplier);
+
 static void
 onvm_nf_instance_stop(struct onvm_nf *parent_nf, struct onvm_nf *stop_instance);
 
@@ -257,12 +258,17 @@ onvm_nf_send_msg(uint16_t dest, uint8_t msg_type, void *msg_data) {
 }
 
 void
-onvm_nf_scaling(void) {
-        uint32_t rx_buffer_for_service[MAX_SERVICES] = {0};
+onvm_nf_scaling(unsigned difftime) {
+        static uint64_t nf_rx_last[MAX_NFS] = {0};
+        uint64_t nf_rx_pps;
+        uint64_t rx_pps_for_service[MAX_SERVICES] = {0};
 
         for (int i = 0; i < MAX_NFS; i++) {
                 if (!onvm_nf_is_valid(&nfs[i]))
                         continue;
+                nf_rx_pps = (nfs[i].stats.rx - nf_rx_last[i]) / difftime;
+                nf_rx_last[i] = nfs[i].stats.rx;
+		nfs[i].stats.rx_pps = 0;
 
                 if (nfs[i].thread_info.parent) {
                         if (nfs[i].idle_time >= 10) {
@@ -281,21 +287,27 @@ onvm_nf_scaling(void) {
                                         nfs[i].idle_time = 0;
                         }
                 }
-                rx_buffer_for_service[nfs[i].service_id] += rte_ring_count(nfs[i].rx_q);
+                rx_pps_for_service[nfs[i].service_id] += nf_rx_pps;
         }
         printf(
             "\n--------------------------------------------------------------------------------------------------------"
-            "--------\n");
+            "--------------\n");
         for (int i = 0; i < MAX_SERVICES; i++) {
                 uint16_t nfs_for_service = nf_per_service_count[i];
                 if (!nfs_for_service)
                         continue;
 
                 uint32_t parent_instance_ID = services[i][0];
+                uint64_t service_handle_rate = nfs[parent_instance_ID].handle_rate;
+                uint64_t H_threshold = onvm_nf_quick_multiplication(service_handle_rate, nfs_for_service);
+                uint64_t L_threshold = onvm_nf_quick_multiplication(service_handle_rate, nfs_for_service - 1);
+
                 printf("Service : %d - child amount : %d - enable amount : %d\n", i,
                        nfs[parent_instance_ID].thread_info.nums_child, nfs_for_service);
+                printf("H_threshold : %ld - L_threshold : %ld - rx_pps : %ld\n\n", H_threshold, L_threshold,
+                       rx_pps_for_service[i]);
 
-                if (rx_buffer_for_service[i] > high_threshold) {
+                if (rx_pps_for_service[i] >= H_threshold) {
                         nfs[parent_instance_ID].thread_info.wait_counter = 10;
 
                         if (nfs[parent_instance_ID].thread_info.sleep_count) {
@@ -308,9 +320,8 @@ onvm_nf_scaling(void) {
                                 printf("Do back pressure in the future\n");
                                 /* Drop the packet which will enter this overloading service */
                         }
-                } else if (rx_buffer_for_service[i] < low_threshold &&
-                           nfs[parent_instance_ID].thread_info.nums_child !=
-                               nfs[parent_instance_ID].thread_info.sleep_count) {
+                } else if (rx_pps_for_service[i] < L_threshold && nfs[parent_instance_ID].thread_info.nums_child !=
+                                                                      nfs[parent_instance_ID].thread_info.sleep_count) {
                         if (nfs[parent_instance_ID].thread_info.wait_counter) {
                                 printf("Wating counter to terminate service %d\n", i);
                                 nfs[parent_instance_ID].thread_info.wait_counter--;
@@ -325,6 +336,24 @@ onvm_nf_scaling(void) {
 }
 
 /******************************Internal functions*****************************/
+
+static inline uint64_t
+onvm_nf_quick_multiplication(uint64_t handle_rate, uint32_t multiplier) {
+        if (multiplier == 1) {
+                return handle_rate;
+        } else if (multiplier == 2) {
+                return handle_rate << 1;
+        } else if (multiplier == 3) {
+                return (handle_rate << 1) + handle_rate;
+        } else if (multiplier == 4) {
+                return handle_rate << 2;
+        } else if (multiplier == 5) {
+                return (handle_rate << 2) + handle_rate;
+        } else {
+                return handle_rate * multiplier;
+        }
+}
+
 static void
 onvm_nf_instance_stop(struct onvm_nf *parent_nf, struct onvm_nf *stop_instance) {
         parent_nf->thread_info.sleep_count--;
@@ -429,10 +458,11 @@ onvm_nf_ready(struct onvm_nf *nf) {
         // Ensure we've already called nf_start for this NF
         if (nf->status != NF_STARTING)
                 return -1;
-
+	/*
         uint16_t service_count = nf_per_service_count[nf->service_id]++;
         services[nf->service_id][service_count] = nf->instance_id;
-        num_nfs++;
+        */
+	num_nfs++;	
         // Register this NF running within its service
         nf->status = NF_RUNNING;
         return 0;
@@ -604,8 +634,9 @@ onvm_nf_init_rings(struct onvm_nf *nf) {
         const char *rq_name;
         const char *tq_name;
         const char *msg_q_name;
+        //const unsigned ringsize = NF_QUEUE_RINGSIZE;
         const unsigned ringsize = NF_QUEUE_RINGSIZE;
-        const unsigned msgringsize = NF_MSG_QUEUE_SIZE;
+	const unsigned msgringsize = NF_MSG_QUEUE_SIZE;
 
         instance_id = nf->instance_id;
         socket_id = rte_socket_id();

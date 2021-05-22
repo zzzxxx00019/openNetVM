@@ -61,4 +61,4 @@ struct onvm_nf_msg {
         void *msg_data;   /* These should be rte_malloc'd so they're stored in hugepages */
 };
 
-#endif // _ONVM_MSG_COMMON_H_
+#endif  // _ONVM_MSG_COMMON_H_

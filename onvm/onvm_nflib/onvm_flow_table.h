@@ -180,7 +180,7 @@ onvm_ft_fill_key_symmetric(struct onvm_ft_ipv4_5tuple *key, struct rte_mbuf *pkt
 
                 temp = key->dst_port;
                 key->dst_port = key->src_port;
-                key->src_port = temp ;
+                key->src_port = temp;
         }
         /*
         if (key->dst_port > key->src_port) {
@@ -199,7 +199,7 @@ onvm_ft_ipv4_hash_crc(const void *data, __rte_unused uint32_t data_len, uint32_t
         uint32_t t;
         const uint32_t *p;
 
-        k = (union ipv4_5tuple_host*) malloc(sizeof(union ipv4_5tuple_host));
+        k = (union ipv4_5tuple_host *)malloc(sizeof(union ipv4_5tuple_host));
         rte_memcpy(k, data, sizeof(union ipv4_5tuple_host));
 
         t = k->proto;
