@@ -306,7 +306,7 @@ onvm_nf_scaling(unsigned difftime) {
                 printf("H_threshold : %ld - L_threshold : %ld - rx_pps : %ld\n\n", H_threshold, L_threshold,
                        rx_pps_for_service[i]);
 
-                if (rx_pps_for_service[i] > H_threshold) {
+                if (rx_pps_for_service[i] >= H_threshold) {
                         nfs[parent_instance_ID].thread_info.wait_counter = 10;
 
                         if (nfs[parent_instance_ID].thread_info.sleep_count) {
@@ -457,9 +457,10 @@ onvm_nf_ready(struct onvm_nf *nf) {
         // Ensure we've already called nf_start for this NF
         if (nf->status != NF_STARTING)
                 return -1;
-
+        /*
         uint16_t service_count = nf_per_service_count[nf->service_id]++;
         services[nf->service_id][service_count] = nf->instance_id;
+        */
         num_nfs++;
         // Register this NF running within its service
         nf->status = NF_RUNNING;

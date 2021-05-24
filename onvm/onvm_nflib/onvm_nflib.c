@@ -112,6 +112,12 @@ uint8_t ONVM_NF_SHARE_CORES;
 
 /***********************Internal Functions Prototypes*************************/
 
+static void
+onvm_nf_ready_receive(struct onvm_nf *nf) {
+        uint16_t service_count = nf_per_service_count[nf->service_id]++;
+        services[nf->service_id][service_count] = nf->instance_id;
+}
+
 /*
  * Function that initialize a nf tx info data structure.
  *
@@ -598,6 +604,7 @@ onvm_nflib_thread_main_loop(void *arg) {
                 nf->function_table->setup(nf_local_ctx);
 
         start_time = rte_get_tsc_cycles();
+        onvm_nf_ready_receive(nf);
         for (; rte_atomic16_read(&nf_local_ctx->keep_running) && rte_atomic16_read(&main_nf_local_ctx->keep_running);) {
                 /* Possibly sleep if in shared core mode, otherwise continue */
                 if (ONVM_NF_SHARE_CORES) {
@@ -657,7 +664,7 @@ onvm_nflib_return_pkt_bulk(struct onvm_nf *nf, struct rte_mbuf **pkts, uint16_t 
         unsigned int i;
         if (pkts == NULL || count == 0)
                 return -1;
-        if (unlikely(rte_ring_enqueue_bulk(nf->tx_q, (void **)pkts, count, NULL) == 0)) {
+        if (unlikely(rte_ring_mp_enqueue_bulk(nf->tx_q, (void **)pkts, count, NULL) == 0)) {
                 nf->stats.tx_drop += count;
                 for (i = 0; i < count; i++) {
                         rte_pktmbuf_free(pkts[i]);
@@ -994,7 +1001,7 @@ onvm_nflib_dequeue_packets(void **pkts, struct onvm_nf_local_ctx *nf_local_ctx, 
         nf = nf_local_ctx->nf;
 
         /* Dequeue all packets in ring up to max possible. */
-        nb_pkts = rte_ring_dequeue_burst(nf->rx_q, pkts, PACKET_READ_SIZE, NULL);
+        nb_pkts = rte_ring_mc_dequeue_burst(nf->rx_q, pkts, PACKET_READ_SIZE, NULL);
 
         if (unlikely(nb_pkts == 0)) {
                 return 0;

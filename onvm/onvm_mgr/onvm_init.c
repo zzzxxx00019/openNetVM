@@ -377,8 +377,9 @@ init_mbuf_pools(void) {
                                           sizeof(struct rte_pktmbuf_pool_private), rte_pktmbuf_pool_init, NULL,
                                           rte_pktmbuf_init, NULL, rte_socket_id(), NO_FLAGS);
 
-        printf("Creating clone mbuf pool '%s' [%u mbufs] ...\n", PKTMBUF_CLONE_POOL_NAME, NUM_MBUFS);
-        pktmbuf_clone_pool = rte_pktmbuf_pool_create(PKTMBUF_CLONE_POOL_NAME, NUM_MBUFS, MBUF_CACHE_SIZE, 0,
+        const unsigned int CLONE_MBUF_SIZE = 3000000;
+        printf("Creating clone mbuf pool '%s' [%u mbufs] ...\n", PKTMBUF_CLONE_POOL_NAME, CLONE_MBUF_SIZE);
+        pktmbuf_clone_pool = rte_pktmbuf_pool_create(PKTMBUF_CLONE_POOL_NAME, CLONE_MBUF_SIZE, MBUF_CACHE_SIZE, 0,
                                                      RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
 
         return (pktmbuf_pool == NULL) | (pktmbuf_clone_pool == NULL); /* 0  on success */

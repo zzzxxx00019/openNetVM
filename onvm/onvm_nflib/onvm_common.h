@@ -68,7 +68,7 @@
 #define MAX_NFS_PER_SERVICE 32   // max number of NFs per service.
 
 #define NUM_MBUFS 32767          // total number of mbufs (2^15 - 1)
-#define NF_QUEUE_RINGSIZE 16384  // size of queue for NFs
+#define NF_QUEUE_RINGSIZE 32768  // size of queue for NFs
 
 #define PACKET_READ_SIZE ((uint16_t)32)
 
@@ -114,13 +114,15 @@
 
 #define PKT_META_PAYLOAD_READ 0
 #define PKT_META_PAYLOAD_WRITE 1
-#define PKT_META_HAS_MUTEX 2
+#define PKT_META_GO_PARALLEL 2
+#define PKT_META_CLONE 3
 
 struct onvm_pkt_meta {
-        uint8_t action;         /* Action to be performed */
-        uint8_t destination;    /* where to go next */
-        uint8_t src;            /* who processed the packet last */
-        uint8_t chain_index;    /*index of the current step in the service chain*/
+        volatile uint8_t action; /* Action to be performed */
+        uint8_t destination;     /* where to go next */
+        uint8_t src;             /* who processed the packet last */
+        uint8_t chain_index;     /*index of the current step in the service chain*/
+        volatile uint8_t mutex_id;
         volatile uint8_t numNF; /* Number of parallel NFs */
         volatile uint8_t flags;
 };
