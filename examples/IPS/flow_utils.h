@@ -6,7 +6,9 @@
 #include "ips_common.h"
 #include "parse_rules.h"
 
-// Key for identifying a rule
+extern FILE *file;
+
+// Key for identifying a flow
 struct FlowTuple {
         rte_be32_t srcAddr;
         rte_be16_t srcPort;
@@ -82,18 +84,22 @@ logStream(T *parser, const unsigned int id) {
                 case ACTION_REJECT:
                         // rst packet
                 case ACTION_DROP:
-                        parser->setdropFlag();
+                        // drop packet
                 case ACTION_ALERT:
+#ifdef _BACK_PRESSURE
+                        parser->setdropFlag();
+#endif
                         // need to modify after cmd line done!
                         // cout << "alert!!" << endl;
+                        fprintf(file, "===============================================================\n");
+                        fprintf(file, "[**]%s[**]\n", it->second.info[id].msg.c_str());
+                        fprintf(file, "%s\n", clock.getTime().c_str());
+                        fprintf(file, "%s %s:%d -> %s:%d\n", parser->getProto().c_str(), srcAddr, srcPort, dstAddr,
+                                dstPort);
+                        fprintf(file, "PCRE:\"/%s/%d\"\n", it->second.info[id].pattern.c_str(),
+                                it->second.info[id].flags);
                 case ACTION_LOG:
-                        clog << "===============================================================\n"
-                             << "[**]" << it->second.info[id].msg << "[**]\n"
-                             << clock.getTime() << "\n"
-                             << parser->getProto() << " " << srcAddr << ":" << srcPort << " -> " << dstAddr << ":"
-                             << dstPort << "\n"
-                             << "PCRE:\"/" << it->second.info[id].pattern << "/" << it->second.info[id].flags << "\""
-                             << endl;
+                        rte_pktmbuf_dump(file, parser->getPkt(), rte_pktmbuf_pkt_len(parser->getPkt()));
                         break;
                 default:
                         parser->setdropFlag();

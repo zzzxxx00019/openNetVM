@@ -218,6 +218,7 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                 onvm_pkt_set_action(pkt, ONVM_NF_ACTION_DROP, 0);
                 stats->packets_dropped++;
         }
+
         return 0;
 }
 

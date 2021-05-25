@@ -24,7 +24,8 @@ class Tcp {
         // Vector of Hyperscan stream state
         vector<vector<hs_stream_t *>> streams;
 
-        unordered_map<FlowTuple, vector<int>, FlowTupleHash> flow_table;
+        unordered_map<FlowTuple, vector<int>, FlowTupleHash> flow_map;
+        const struct rte_mbuf *packet;
         const string protocol = "TCP";
         const FlowTuple *hdr;
         size_t *matchCount;
@@ -48,6 +49,11 @@ class Tcp {
         inline const string
         getProto() {
                 return protocol;
+        }
+
+        inline const struct rte_mbuf *
+        getPkt() {
+                return packet;
         }
 
         inline void

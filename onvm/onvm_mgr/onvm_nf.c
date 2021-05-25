@@ -268,7 +268,6 @@ onvm_nf_scaling(unsigned difftime) {
                         continue;
                 nf_rx_pps = (nfs[i].stats.rx - nf_rx_last[i]) / difftime;
                 nf_rx_last[i] = nfs[i].stats.rx;
-		nfs[i].stats.rx_pps = 0;
 
                 if (nfs[i].thread_info.parent) {
                         if (nfs[i].idle_time >= 10) {
@@ -458,11 +457,11 @@ onvm_nf_ready(struct onvm_nf *nf) {
         // Ensure we've already called nf_start for this NF
         if (nf->status != NF_STARTING)
                 return -1;
-	/*
+        /*
         uint16_t service_count = nf_per_service_count[nf->service_id]++;
         services[nf->service_id][service_count] = nf->instance_id;
         */
-	num_nfs++;	
+        num_nfs++;
         // Register this NF running within its service
         nf->status = NF_RUNNING;
         return 0;
@@ -634,9 +633,8 @@ onvm_nf_init_rings(struct onvm_nf *nf) {
         const char *rq_name;
         const char *tq_name;
         const char *msg_q_name;
-        //const unsigned ringsize = NF_QUEUE_RINGSIZE;
         const unsigned ringsize = NF_QUEUE_RINGSIZE;
-	const unsigned msgringsize = NF_MSG_QUEUE_SIZE;
+        const unsigned msgringsize = NF_MSG_QUEUE_SIZE;
 
         instance_id = nf->instance_id;
         socket_id = rte_socket_id();

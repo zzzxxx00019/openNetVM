@@ -60,7 +60,7 @@ HYPERSCAN= $(SRCDIR)/../../hyperscan
 
 CC = g++
 
-CPPFLAGS = -O3 $(USER_FLAGS) -lpcap -std=c++11 -march=native
+CPPFLAGS = -O3 $(USER_FLAGS) -lpcap -std=c++11 -march=native -D _BACK_PRESSURE
 CPPFLAGS += -I$(ONVM)/onvm_nflib
 CPPFLAGS += -I$(ONVM)/lib
 CPPFLAGS += -I$(DPDK)/$(RTE_TARGET)/include

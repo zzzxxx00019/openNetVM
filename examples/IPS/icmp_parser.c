@@ -17,9 +17,11 @@ onMatch(unsigned int id, unsigned long long from, unsigned long long to, unsigne
         char dstAddr[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &hdr->srcAddr, srcAddr, sizeof(srcAddr));
         inet_ntop(AF_INET, &hdr->dstAddr, dstAddr, sizeof(dstAddr));
+        /*
         clog << "WRANING!!" << endl;
         clog << it->second.info[id].action << " " << srcAddr << " -> " << dstAddr << endl;
         clog << it->second.info[id].msg << endl;
+        */
         return 0;  // continue matching
 }
 

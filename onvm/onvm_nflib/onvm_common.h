@@ -115,13 +115,14 @@
 #define PKT_META_PAYLOAD_READ 0
 #define PKT_META_PAYLOAD_WRITE 1
 #define PKT_META_GO_PARALLEL 2
-#define PKT_META_BEEN_COVER 3
+#define PKT_META_CLONE 3
 
 struct onvm_pkt_meta {
-        uint8_t action;         /* Action to be performed */
-        uint8_t destination;    /* where to go next */
-        uint8_t src;            /* who processed the packet last */
-        uint8_t chain_index;    /*index of the current step in the service chain*/
+        volatile uint8_t action; /* Action to be performed */
+        uint8_t destination;     /* where to go next */
+        uint8_t src;             /* who processed the packet last */
+        uint8_t chain_index;     /*index of the current step in the service chain*/
+        volatile uint8_t mutex_id;
         volatile uint8_t numNF; /* Number of parallel NFs */
         volatile uint8_t flags;
 };
@@ -324,7 +325,6 @@ struct onvm_nf {
          * or transmitted on an actual NIC port.
          */
         struct {
-		volatile uint64_t rx_pps;
                 volatile uint64_t rx;
                 volatile uint64_t rx_drop;
                 volatile uint64_t rx_buffer;

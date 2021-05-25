@@ -46,9 +46,9 @@
 
 ******************************************************************************/
 
-#include "onvm_pkt_common.h"
+//#define _measure
 
-#define _experiment
+#include "onvm_pkt_common.h"
 
 sem_t *onvm_pkt_mutex[16];
 sem_t *onvm_set_action_mutex[16];
@@ -70,15 +70,6 @@ onvm_pkt_clear_meta_bit(uint8_t flags, uint8_t n) {
         return ((flags ^ (1 << (n))) & flags);
 }
 
-#ifdef _experiment
-/*
- * Check RX is free for packet
- * Drop the TX queue when destination RX is not enought
- */
-static void
-onvm_pkt_check_buffer_free(struct queue_mgr *tx_mgr, struct onvm_nf *source_nf);
-#endif
-
 /*
  * Function to enqueue multi NF
  * Check all of NF is available
@@ -86,16 +77,6 @@ onvm_pkt_check_buffer_free(struct queue_mgr *tx_mgr, struct onvm_nf *source_nf);
 static inline void
 onvm_pkt_enqueue_multi_nf(struct queue_mgr *tx_mgr, uint8_t dst_service, struct rte_mbuf *pkt,
                           struct onvm_nf *source_nf);
-
-#ifdef _experiment
-/*
- * Function to drop all of packet in tx queue
- * When a instance is overloading
- * Drop the packets before enqueue to the instance
- */
-static void
-onvm_pkt_drop_nf_queue(struct queue_mgr *tx_mgr, uint16_t nf_id, struct onvm_nf *source_nf);
-#endif
 
 /*
  * Function to enqueue a packet on one port's queue.
@@ -163,6 +144,11 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
         struct onvm_pkt_meta *meta;
         struct packet_buf *out_buf;
 
+#ifdef _measure
+	static uint64_t counter = 0;
+	static uint64_t cost = 0;
+#endif
+
         if (tx_mgr == NULL || pkts == NULL || nf == NULL)
                 return;
 
@@ -170,19 +156,44 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                 meta = (struct onvm_pkt_meta *)&(((struct rte_mbuf *)pkts[i])->udata64);
                 meta->src = nf->instance_id;
 
+#ifdef _measure
+		counter ++;
+		uint64_t start = rte_get_timer_cycles();
+#endif
+
                 if (onvm_pkt_check_meta_bit(meta->flags, PKT_META_GO_PARALLEL)) {
-                        sem_t *pkt_mutex = onvm_pkt_mutex[pkts[i]->hash.rss % 16];
+                        sem_t *pkt_mutex = onvm_pkt_mutex[meta->mutex_id];
                         sem_wait(pkt_mutex);
                         if (meta->numNF) {
                                 if (--meta->numNF) {
                                         sem_post(pkt_mutex);
-                                        nf->stats.act_cont++;
+                                        
+#ifdef _measure
+					uint64_t end = rte_get_timer_cycles();
+					cost += (end - start);
+					if ((counter % 1000000) == 0) {
+						uint64_t latency = ((cost * 1000) / rte_get_timer_hz());
+						printf("process cost = %ld cycles, latency = %ld nanosecond\n", cost, latency);
+						cost = 0;
+					}
+#endif
+
                                         continue;
                                 }
                         }
                         meta->flags = onvm_pkt_clear_meta_bit(meta->flags, PKT_META_GO_PARALLEL);
                         sem_post(pkt_mutex);
                 }
+
+#ifdef _measure
+		uint64_t end = rte_get_timer_cycles();
+		cost += (end - start);
+		if ((counter % 1000000) == 0) {
+			uint64_t latency = ((cost * 1000) / rte_get_timer_hz());
+			printf("process cost = %ld cycles, latency = %ld nanosecond\n", cost, latency);
+			cost = 0;
+		}
+#endif
 
                 if (meta->action == ONVM_NF_ACTION_DROP) {
                         // if the packet is drop, then <return value> is 0
@@ -207,10 +218,7 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                                 onvm_pkt_enqueue_port(tx_mgr, meta->destination, pkts[i]);
                         }
                 } else if (meta->action == ONVM_NF_ACTION_PARA) {
-                        meta->flags = onvm_pkt_set_meta_bit(meta->flags, PKT_META_GO_PARALLEL);
                         onvm_pkt_enqueue_multi_nf(tx_mgr, meta->destination, pkts[i], nf);
-                        nf->stats.act_tonf += meta->numNF;
-
                 } else {
                         printf("ERROR invalid action : this shouldn't happen.\n");
                         onvm_pkt_drop(pkts[i]);
@@ -218,22 +226,6 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                 }
         }
 }
-/*
-void
-onvm_pkt_flush_all_nfs(struct queue_mgr *tx_mgr, struct onvm_nf *source_nf) {
-        uint16_t i;
-
-        if (tx_mgr == NULL)
-                return;
-
-#ifdef _experiment
-        onvm_pkt_check_buffer_free(tx_mgr, source_nf);
-#else
-        for (i = 0; i < MAX_NFS; i++)
-                onvm_pkt_flush_nf_queue(tx_mgr, i, source_nf);
-#endif
-}
-*/
 
 void
 onvm_pkt_flush_port_queue(struct queue_mgr *tx_mgr, uint16_t port) {
@@ -263,15 +255,13 @@ onvm_pkt_flush_port_queue(struct queue_mgr *tx_mgr, uint16_t port) {
 
 void
 onvm_pkt_enqueue_tx_thread(struct packet_buf *pkt_buf, struct onvm_nf *nf) {
-        uint16_t i;
-
         if (pkt_buf->count == 0)
                 return;
 
         if (unlikely(pkt_buf->count > 0 &&
                      rte_ring_enqueue_bulk(nf->tx_q, (void **)pkt_buf->buffer, pkt_buf->count, NULL) == 0)) {
                 nf->stats.tx_drop += pkt_buf->count;
-                for (i = 0; i < pkt_buf->count; i++) {
+                for (uint16_t i = 0; i < pkt_buf->count; i++) {
                         rte_pktmbuf_free(pkt_buf->buffer[i]);
                 }
         } else {
@@ -358,7 +348,9 @@ static int
 onvm_pkt_drop(struct rte_mbuf *pkt) {
         if (!pkt)
                 return 1;
+
         rte_pktmbuf_free(pkt);
+
         if (pkt != NULL) {
                 return 1;
         }
@@ -367,9 +359,22 @@ onvm_pkt_drop(struct rte_mbuf *pkt) {
 
 int
 onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination) {
+
+#ifdef _measure
+	//static FILE *file = NULL;
+	static uint64_t counter = 0;
+	static uint64_t cost = 0;
+	static uint64_t start, end;
+	/*
+	if (file == NULL)
+		file = fopen("set_action.txt", "w");
+	*/
+	start = rte_get_timer_cycles();
+#endif
+
         struct onvm_pkt_meta *meta = onvm_get_pkt_meta(pkt);
         if (onvm_pkt_check_meta_bit(meta->flags, PKT_META_GO_PARALLEL)) {
-                sem_t *pkt_mutex = onvm_set_action_mutex[pkt->hash.rss % 16];
+                sem_t *pkt_mutex = onvm_set_action_mutex[meta->mutex_id];
                 sem_wait(pkt_mutex);
                 if (action > meta->action) {
                         meta->action = action;
@@ -380,6 +385,22 @@ onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination) {
                 meta->action = action;
                 meta->destination = destination;
         }
+
+#ifdef _measure
+	end = rte_get_timer_cycles();
+	cost += (end - start);
+	if( ((++counter) % 1000000) == 0) {
+		uint64_t latency = ((cost * 1000) / rte_get_timer_hz());
+		printf("cost = %ld cycles,latency = %ld nanosecond\n", cost, latency);
+		cost = 0;
+	}
+	/*
+	if(counter == 50000) {
+		fclose(file);
+	}
+	*/
+
+#endif
 
         return 0;
 }
@@ -403,6 +424,12 @@ onvm_init_pkt_mutex(void) {
         onvm_pkt_mutex[13] = sem_open("pkt_mutex13", 0);
         onvm_pkt_mutex[14] = sem_open("pkt_mutex14", 0);
         onvm_pkt_mutex[15] = sem_open("pkt_mutex15", 0);
+
+        for (int i = 0; i < 16; i++) {
+                if (onvm_pkt_mutex[i] == SEM_FAILED) {
+                        printf("onvm_pkt_mutex[%d] open failed\n", i);
+                }
+        }
 }
 
 inline void
@@ -423,17 +450,25 @@ onvm_init_set_action_mutex(void) {
         onvm_set_action_mutex[13] = sem_open("set_action_mutex13", 0);
         onvm_set_action_mutex[14] = sem_open("set_action_mutex14", 0);
         onvm_set_action_mutex[15] = sem_open("set_action_mutex15", 0);
+
+        for (int i = 0; i < 16; i++) {
+                if (onvm_set_action_mutex[i] == SEM_FAILED) {
+                        printf("onvm_set_action_mutex[%d] open failed\n", i);
+                }
+        }
 }
 
 /*******************************packet enqueue nf*****************************/
 static inline void
 onvm_pkt_enqueue_multi_nf(struct queue_mgr *tx_mgr, uint8_t dst_service, struct rte_mbuf *pkt,
                           struct onvm_nf *source_nf) {
+        struct onvm_pkt_meta *meta = (struct onvm_pkt_meta *)&pkt->udata64;
         struct onvm_nf *nf;
-        uint8_t i;
+        uint8_t i, j;
         uint32_t dst_service_id[10];
         uint16_t dst_instance_id[10];
         uint16_t dst_counter = 0;
+        static uint32_t counter = 0;
 
         if (tx_mgr == NULL || pkt == NULL)
                 return;
@@ -460,14 +495,35 @@ onvm_pkt_enqueue_multi_nf(struct queue_mgr *tx_mgr, uint8_t dst_service, struct 
                         }
                 }
         }
+        for (i = 0; i < dst_counter; i++) {
+                nf = &nfs[dst_instance_id[i]];
+                if (rte_ring_free_count(nf->rx_q) < (PACKET_READ_SIZE + 100)) {
+                        onvm_pkt_drop(pkt);
+                        if (source_nf != NULL)
+                                source_nf->stats.tx_drop++;
 
+                        for (j = 0; j < dst_counter; j++) {
+                                nf = &nfs[dst_instance_id[j]];
+                                nf->stats.rx_drop++;
+                        }
+                        return;
+                }
+        }
+
+        meta->flags = onvm_pkt_set_meta_bit(meta->flags, PKT_META_GO_PARALLEL);
+        meta->mutex_id = (counter++) % 16;
+        meta->numNF = dst_counter;
         struct packet_buf *nf_buf;
-        for (uint8_t i = 0; i < dst_counter; i++) {
+        for (i = 0; i < dst_counter; i++) {
                 nf_buf = &tx_mgr->nf_rx_bufs[dst_instance_id[i]];
                 nf_buf->buffer[nf_buf->count++] = pkt;
                 if (nf_buf->count == PACKET_READ_SIZE) {
-                        onvm_pkt_flush_all_nfs(tx_mgr, source_nf);
+                        onvm_pkt_flush_nf_queue(tx_mgr, dst_instance_id[i], source_nf);
                 }
+        }
+        if (source_nf != NULL) {
+                source_nf->stats.tx += 1;
+                source_nf->stats.act_tonf += 1;
         }
         return;
 }
@@ -507,67 +563,14 @@ onvm_pkt_enqueue_nf(struct queue_mgr *tx_mgr, uint16_t dst_service_id, struct rt
         }
 }
 
-/*******************************packet buffer check***************************/
-#ifdef _experiment
-static void
-onvm_pkt_check_buffer_free(struct queue_mgr *tx_mgr, struct onvm_nf *source_nf) {
-        struct packet_buf *nf_buf;
-        struct onvm_nf *nf;
-        bool drop_flag = false;
-        uint16_t NF_counter = 0;
-        uint16_t instance_id[10];
-        // Check rx_q buffer is ready and available to reveive
-        for (uint16_t i = 0; i < MAX_NFS; i++) {
-                nf_buf = &tx_mgr->nf_rx_bufs[i];
-                if (nf_buf->count != 0) {
-                        nf = &nfs[i];
-                        if (drop_flag == false && rte_ring_free_count(nf->rx_q) < (nf_buf->count + 100))
-                                drop_flag = true;
-                        instance_id[NF_counter++] = i;
-                }
-        }
-        // Only do when go parallel
-        if (drop_flag == true && NF_counter > 1) {
-                for (uint16_t i = 0; i < NF_counter; i++) {
-                        onvm_pkt_drop_nf_queue(tx_mgr, instance_id[i], source_nf);
-                }
-        }
-}
-#endif
-
-#ifdef _experiment
-static void
-onvm_pkt_drop_nf_queue(struct queue_mgr *tx_mgr, uint16_t nf_id, struct onvm_nf *source_nf) {
-        struct onvm_nf *nf;
-        struct packet_buf *nf_buf;
-
-        if (tx_mgr == NULL)
-                return;
-
-        nf_buf = &tx_mgr->nf_rx_bufs[nf_id];
-        if (nf_buf->count == 0)
-                return;
-
-        nf = &nfs[nf_id];
-        if (onvm_nf_is_valid(nf)) {
-                nf->stats.rx_drop += nf_buf->count;
-        }
-        if (source_nf != NULL) {
-                source_nf->stats.tx_drop += nf_buf->count;
-        }
-        nf_buf->count = 0;
-}
-#endif
-
 /*******************************packet buffer flush***************************/
+
 void
 onvm_pkt_flush_all_nfs(struct queue_mgr *tx_mgr, struct onvm_nf *source_nf) {
         uint16_t i;
 
         if (tx_mgr == NULL)
                 return;
-
-        onvm_pkt_check_buffer_free(tx_mgr, source_nf);
 
         for (i = 0; i < MAX_NFS; i++)
                 onvm_pkt_flush_nf_queue(tx_mgr, i, source_nf);
@@ -593,24 +596,18 @@ onvm_pkt_flush_nf_queue(struct queue_mgr *tx_mgr, uint16_t nf_id, struct onvm_nf
                 return;
 
         if (rte_ring_mp_enqueue_bulk(nf->rx_q, (void **)nf_buf->buffer, nf_buf->count, NULL) == 0) {
-                /*
                 for (i = 0; i < nf_buf->count; i++) {
-                                                //struct rte_mbuf *pkt = nf_buf->buffer[i];
-                                                //struct onvm_pkt_meta *meta = (struct onvm_pkt_meta *)&pkt->udata64;
-                                                //if (!onvm_pkt_check_meta_bit(meta->flags, PKT_META_ENQUEUE_DONE))
-                                                //		onvm_pkt_drop(pkt);
-                                                onvm_pkt_drop(nf_buf->buffer[i]);
+                        struct onvm_pkt_meta *meta = onvm_get_pkt_meta(nf_buf->buffer[i]);
+                        if (meta->numNF > 1)
+                                meta->numNF--;
+                        else
+                                onvm_pkt_drop(nf_buf->buffer[i]);
                 }
-                */
+
                 nf->stats.rx_drop += nf_buf->count;
                 if (source_nf != NULL)
                         source_nf->stats.tx_drop += nf_buf->count;
         } else {
-                for (i = 0; i < nf_buf->count; i++) {
-                        struct rte_mbuf *pkt = nf_buf->buffer[i];
-                        struct onvm_pkt_meta *meta = (struct onvm_pkt_meta *)&pkt->udata64;
-                        meta->numNF = onvm_pkt_check_meta_bit(meta->flags, PKT_META_GO_PARALLEL) ? meta->numNF + 1 : 0;
-                }
                 nf->stats.rx += nf_buf->count;
                 if (source_nf != NULL)
                         source_nf->stats.tx += nf_buf->count;

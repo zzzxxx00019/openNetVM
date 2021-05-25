@@ -70,8 +70,20 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
         (void) meta;
 
+	static uint64_t counter = 0;
+	static uint64_t start, end, cost, latency;
+	start = rte_get_timer_cycles();
+
+	rte_delay_us_block(10);
 	onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, 3);
-	//rte_delay_us_block(1);
+
+	end = rte_get_timer_cycles();
+	cost += (end - start);
+	if ((++counter)%1000000 == 0) {
+		latency = (cost * 1000) / rte_get_timer_hz();
+		printf("cost %ld cycles - latency = %ld nanosecond\n", cost, latency);
+		cost = 0;
+	}
 
         return 0;
 }

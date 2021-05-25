@@ -114,8 +114,8 @@ uint8_t ONVM_NF_SHARE_CORES;
 
 static void
 onvm_nf_ready_receive(struct onvm_nf *nf) {
-	uint16_t service_count = nf_per_service_count[nf->service_id]++;
-	services[nf->service_id][service_count] = nf->instance_id;
+        uint16_t service_count = nf_per_service_count[nf->service_id]++;
+        services[nf->service_id][service_count] = nf->instance_id;
 }
 
 /*
@@ -604,7 +604,7 @@ onvm_nflib_thread_main_loop(void *arg) {
                 nf->function_table->setup(nf_local_ctx);
 
         start_time = rte_get_tsc_cycles();
-	onvm_nf_ready_receive(nf);
+        onvm_nf_ready_receive(nf);
         for (; rte_atomic16_read(&nf_local_ctx->keep_running) && rte_atomic16_read(&main_nf_local_ctx->keep_running);) {
                 /* Possibly sleep if in shared core mode, otherwise continue */
                 if (ONVM_NF_SHARE_CORES) {

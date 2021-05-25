@@ -18,6 +18,7 @@ string patternFile = "rules/snort3-http.rules";
 static uint32_t destination = (uint16_t)-1;
 
 // Shared Library
+FILE *file;
 RulesHashMp *Rules;
 
 static void
@@ -50,11 +51,36 @@ static int
 packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta, struct onvm_nf_local_ctx *nf_local_ctx) {
         Flow *parser = (Flow *)nf_local_ctx->nf->data;
         parser->scanFlow(pkt);
+        // Add backpressure
+#ifdef _BACK_PRESSURE
+        if (parser->drop()) {
+                struct onvm_flow_entry *flow_entry = NULL;
+                int ret = onvm_flow_dir_get_pkt(pkt, &flow_entry);
+                if (ret >= 0) {
+                        printf("Error happend, flow table can not hit\n");
+                        onvm_pkt_set_action(pkt, ONVM_NF_ACTION_DROP, 0);
+                } else {
+                        ret = onvm_flow_dir_add_pkt(pkt, &flow_entry);
+                        if (ret < 0) {
+                                printf("add entry fail, drop the pkt\n");
+                                onvm_pkt_set_action(pkt, ONVM_NF_ACTION_DROP, 0);
+                        }
+                        memset(flow_entry, 0, sizeof(struct onvm_flow_entry));
+                        flow_entry->sc = onvm_sc_create();
+                        onvm_sc_set_entry(flow_entry->sc, 0, ONVM_NF_ACTION_DROP, 0);
+                        // onvm_sc_append_entry(flow_entry->sc, ONVM_NF_ACTION_TONF, 3);
+                        // onvm_sc_append_entry(flow_entry->sc, ONVM_NF_ACTION_TONF, 4);
+                        onvm_pkt_set_action(pkt, ONVM_NF_ACTION_DROP, 0);
+                }
+                return 0;
+        }
+#else
         // Drop
         if (parser->drop()) {
                 onvm_pkt_set_action(pkt, ONVM_NF_ACTION_DROP, 0);
                 return 0;
         }
+#endif
         // Pass
         if (destination != (uint16_t)-1) {
                 onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, destination);
@@ -120,9 +146,9 @@ main(int argc, char **argv) {
 
         /* Build database from pattern file */
         Rules = databasesFromFile(patternFile.c_str());
-        streambuf *backup = clog.rdbuf();
-        ofstream file = ofstream(logFile);
-        clog.rdbuf(file.rdbuf());
+        /* Open log file */
+        file = fopen(logFile.c_str(), "w");
+
         /* Setup cmd interface */
         /*
         pthread_t cmd_line;  // pthread variable
@@ -133,12 +159,14 @@ main(int argc, char **argv) {
         */
         struct onvm_nf *parent_nf = nf_local_ctx->nf;
         parent_nf->handle_rate = 1000000;
-
+#ifdef _BACK_PRESSURE
+        /* Map the sdn_ft table */
+        onvm_flow_dir_nf_init();
+#endif
         onvm_nflib_run(nf_local_ctx);
-
         onvm_nflib_stop(nf_local_ctx);
-        clog.rdbuf(backup);
-        file.close();
+
+        fclose(file);
         printf("If we reach here, program is ending\n");
         return 0;
 }

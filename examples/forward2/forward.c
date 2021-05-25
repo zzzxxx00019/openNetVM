@@ -68,13 +68,23 @@ parse_app_args(int argc, char *argv[], const char *progname) {
 static int
 packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
+       	
+       	(void) meta;	
         
-        // If packet go parallel, check clone complete before handling
-        while(pkt!=NULL && meta->payload_read);
-        meta->payload_write = false;
+	static uint64_t counter = 0;
+	static uint64_t start, end, cost, latency;
+	start = rte_get_timer_cycles();
 
-        // Handle the packet
+	rte_delay_us_block(10);
         onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, 5);
+
+	end = rte_get_timer_cycles();
+	cost += (end - start);
+	if ((++counter)%1000000 == 0) {
+		latency = (cost * 1000) / rte_get_timer_hz();
+		printf("cost %ld cycles - latency = %ld nanosecond\n", cost, latency);
+		cost = 0;
+	}
 
         return 0;
 }
@@ -112,6 +122,9 @@ main(int argc, char *argv[]) {
 
         cur_cycles = rte_get_tsc_cycles();
         last_cycle = rte_get_tsc_cycles();
+
+	struct onvm_nf *parent_nf = nf_local_ctx->nf;
+	parent_nf->handle_rate = 10000000;
 
         onvm_nflib_run(nf_local_ctx);
 

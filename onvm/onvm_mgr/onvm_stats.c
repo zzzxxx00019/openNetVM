@@ -464,8 +464,6 @@ onvm_stats_display_nfs(unsigned difftime, uint8_t verbosity_level) {
                 const uint64_t wakeup_rate = (num_wakeups - prev_num_wakeups) / difftime;
                 char state;
 
-		nfs[i].stats.rx_pps = 0;
-
                 uint8_t active = 0;
                 if (ONVM_NF_SHARE_CORES)
                         active = rte_atomic16_read(nf_wakeup_infos[i].shm_server);

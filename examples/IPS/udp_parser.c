@@ -41,16 +41,17 @@ Udp::scanStream(const struct rte_mbuf *pkt) {
         const FlowTuple header(ipv4, udp->src_port, udp->dst_port);
         hs_error_t err;
 
+        packet = pkt;
         hdr = &header;
-        if (flow_table.find(header) == flow_table.end()) {
+        if (flow_map.find(header) == flow_map.end()) {
                 int index = 0;
                 for (it = udp_rules->begin(); it != udp_rules->end(); ++it, ++index) {
                         if (parseRule(it->first, header)) {
-                                flow_table[header].push_back(index);
+                                flow_map[header].push_back(index);
                         }
                 }
         }
-        for (auto &index : flow_table.at(header)) {
+        for (auto &index : flow_map.at(header)) {
                 it = next(udp_rules->begin(), index);
                 stream_map[index].insert(make_pair(header, stream_map[index].size()));
                 err = hs_scan_stream(streams[index][stream_map[index].size()], payload, length, 0, *scratch, onMatch,
