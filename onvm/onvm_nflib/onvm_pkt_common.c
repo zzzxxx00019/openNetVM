@@ -46,10 +46,12 @@
 
 ******************************************************************************/
 
+//#define _measure
+
 #include "onvm_pkt_common.h"
 
-sem_t *onvm_pkt_mutex[16];
-sem_t *onvm_set_action_mutex[16];
+sem_t *onvm_pkt_mutex[32];
+sem_t *onvm_set_action_mutex[32];
 
 /**********************Internal Functions Prototypes**************************/
 
@@ -142,6 +144,11 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
         struct onvm_pkt_meta *meta;
         struct packet_buf *out_buf;
 
+#ifdef _measure
+        static uint64_t counter = 0;
+        static uint64_t cost = 0;
+#endif
+
         if (tx_mgr == NULL || pkts == NULL || nf == NULL)
                 return;
 
@@ -149,19 +156,45 @@ onvm_pkt_process_tx_batch(struct queue_mgr *tx_mgr, struct rte_mbuf *pkts[], uin
                 meta = (struct onvm_pkt_meta *)&(((struct rte_mbuf *)pkts[i])->udata64);
                 meta->src = nf->instance_id;
 
+#ifdef _measure
+                counter++;
+                uint64_t start = rte_get_timer_cycles();
+#endif
+
                 if (onvm_pkt_check_meta_bit(meta->flags, PKT_META_GO_PARALLEL)) {
                         sem_t *pkt_mutex = onvm_pkt_mutex[meta->mutex_id];
                         sem_wait(pkt_mutex);
                         if (meta->numNF) {
                                 if (--meta->numNF) {
                                         sem_post(pkt_mutex);
-                                        nf->stats.act_cont++;
+
+#ifdef _measure
+                                        uint64_t end = rte_get_timer_cycles();
+                                        cost += (end - start);
+                                        if ((counter % 1000000) == 0) {
+                                                uint64_t latency = ((cost * 1000) / rte_get_timer_hz());
+                                                printf("process cost = %ld cycles, latency = %ld nanosecond\n", cost,
+                                                       latency);
+                                                cost = 0;
+                                        }
+#endif
+
                                         continue;
                                 }
                         }
                         meta->flags = onvm_pkt_clear_meta_bit(meta->flags, PKT_META_GO_PARALLEL);
                         sem_post(pkt_mutex);
                 }
+
+#ifdef _measure
+                uint64_t end = rte_get_timer_cycles();
+                cost += (end - start);
+                if ((counter % 1000000) == 0) {
+                        uint64_t latency = ((cost * 1000) / rte_get_timer_hz());
+                        printf("process cost = %ld cycles, latency = %ld nanosecond\n", cost, latency);
+                        cost = 0;
+                }
+#endif
 
                 if (meta->action == ONVM_NF_ACTION_DROP) {
                         // if the packet is drop, then <return value> is 0
@@ -327,6 +360,13 @@ onvm_pkt_drop(struct rte_mbuf *pkt) {
 
 int
 onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination) {
+#ifdef _measure
+        static uint64_t counter = 0;
+        static uint64_t cost = 0;
+        static uint64_t start, end;
+        start = rte_get_timer_cycles();
+#endif
+
         struct onvm_pkt_meta *meta = onvm_get_pkt_meta(pkt);
         if (onvm_pkt_check_meta_bit(meta->flags, PKT_META_GO_PARALLEL)) {
                 sem_t *pkt_mutex = onvm_set_action_mutex[meta->mutex_id];
@@ -340,6 +380,17 @@ onvm_pkt_set_action(struct rte_mbuf *pkt, uint8_t action, uint8_t destination) {
                 meta->action = action;
                 meta->destination = destination;
         }
+
+#ifdef _measure
+        end = rte_get_timer_cycles();
+        cost += (end - start);
+        if (((++counter) % 1000000) == 0) {
+                uint64_t latency = ((cost * 1000) / rte_get_timer_hz());
+                printf("cost = %ld cycles,latency = %ld nanosecond\n", cost, latency);
+                cost = 0;
+        }
+#endif
+
         return 0;
 }
 
@@ -362,8 +413,24 @@ onvm_init_pkt_mutex(void) {
         onvm_pkt_mutex[13] = sem_open("pkt_mutex13", 0);
         onvm_pkt_mutex[14] = sem_open("pkt_mutex14", 0);
         onvm_pkt_mutex[15] = sem_open("pkt_mutex15", 0);
+        onvm_pkt_mutex[16] = sem_open("pkt_mutex16", 0);
+        onvm_pkt_mutex[17] = sem_open("pkt_mutex17", 0);
+        onvm_pkt_mutex[18] = sem_open("pkt_mutex18", 0);
+        onvm_pkt_mutex[19] = sem_open("pkt_mutex19", 0);
+        onvm_pkt_mutex[20] = sem_open("pkt_mutex20", 0);
+        onvm_pkt_mutex[21] = sem_open("pkt_mutex21", 0);
+        onvm_pkt_mutex[22] = sem_open("pkt_mutex22", 0);
+        onvm_pkt_mutex[23] = sem_open("pkt_mutex23", 0);
+        onvm_pkt_mutex[24] = sem_open("pkt_mutex24", 0);
+        onvm_pkt_mutex[25] = sem_open("pkt_mutex25", 0);
+        onvm_pkt_mutex[26] = sem_open("pkt_mutex26", 0);
+        onvm_pkt_mutex[27] = sem_open("pkt_mutex27", 0);
+        onvm_pkt_mutex[28] = sem_open("pkt_mutex28", 0);
+        onvm_pkt_mutex[29] = sem_open("pkt_mutex29", 0);
+        onvm_pkt_mutex[30] = sem_open("pkt_mutex30", 0);
+        onvm_pkt_mutex[31] = sem_open("pkt_mutex31", 0);
 
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < 32; i++) {
                 if (onvm_pkt_mutex[i] == SEM_FAILED) {
                         printf("onvm_pkt_mutex[%d] open failed\n", i);
                 }
@@ -388,8 +455,24 @@ onvm_init_set_action_mutex(void) {
         onvm_set_action_mutex[13] = sem_open("set_action_mutex13", 0);
         onvm_set_action_mutex[14] = sem_open("set_action_mutex14", 0);
         onvm_set_action_mutex[15] = sem_open("set_action_mutex15", 0);
+        onvm_set_action_mutex[16] = sem_open("set_action_mutex16", 0);
+        onvm_set_action_mutex[17] = sem_open("set_action_mutex17", 0);
+        onvm_set_action_mutex[18] = sem_open("set_action_mutex18", 0);
+        onvm_set_action_mutex[19] = sem_open("set_action_mutex19", 0);
+        onvm_set_action_mutex[20] = sem_open("set_action_mutex20", 0);
+        onvm_set_action_mutex[21] = sem_open("set_action_mutex21", 0);
+        onvm_set_action_mutex[22] = sem_open("set_action_mutex22", 0);
+        onvm_set_action_mutex[23] = sem_open("set_action_mutex23", 0);
+        onvm_set_action_mutex[24] = sem_open("set_action_mutex24", 0);
+        onvm_set_action_mutex[25] = sem_open("set_action_mutex25", 0);
+        onvm_set_action_mutex[26] = sem_open("set_action_mutex26", 0);
+        onvm_set_action_mutex[27] = sem_open("set_action_mutex27", 0);
+        onvm_set_action_mutex[28] = sem_open("set_action_mutex28", 0);
+        onvm_set_action_mutex[29] = sem_open("set_action_mutex29", 0);
+        onvm_set_action_mutex[30] = sem_open("set_action_mutex30", 0);
+        onvm_set_action_mutex[31] = sem_open("set_action_mutex31", 0);
 
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < 32; i++) {
                 if (onvm_set_action_mutex[i] == SEM_FAILED) {
                         printf("onvm_set_action_mutex[%d] open failed\n", i);
                 }
@@ -449,7 +532,7 @@ onvm_pkt_enqueue_multi_nf(struct queue_mgr *tx_mgr, uint8_t dst_service, struct 
         }
 
         meta->flags = onvm_pkt_set_meta_bit(meta->flags, PKT_META_GO_PARALLEL);
-        meta->mutex_id = (counter++) % 16;
+        meta->mutex_id = (counter++) % 32;
         meta->numNF = dst_counter;
         struct packet_buf *nf_buf;
         for (i = 0; i < dst_counter; i++) {
@@ -460,7 +543,6 @@ onvm_pkt_enqueue_multi_nf(struct queue_mgr *tx_mgr, uint8_t dst_service, struct 
                 }
         }
         if (source_nf != NULL) {
-                source_nf->stats.tx += 1;
                 source_nf->stats.act_tonf += 1;
         }
         return;

@@ -286,7 +286,7 @@ init(int argc, char *argv[]) {
 
 static inline void
 init_set_action_mutex(void) {
-        char mutex_name[16][20];
+        char mutex_name[32][20];
         strcpy(mutex_name[0], "set_action_mutex0");
         strcpy(mutex_name[1], "set_action_mutex1");
         strcpy(mutex_name[2], "set_action_mutex2");
@@ -303,8 +303,24 @@ init_set_action_mutex(void) {
         strcpy(mutex_name[13], "set_action_mutex13");
         strcpy(mutex_name[14], "set_action_mutex14");
         strcpy(mutex_name[15], "set_action_mutex15");
+        strcpy(mutex_name[16], "set_action_mutex16");
+        strcpy(mutex_name[17], "set_action_mutex17");
+        strcpy(mutex_name[18], "set_action_mutex18");
+        strcpy(mutex_name[19], "set_action_mutex19");
+        strcpy(mutex_name[20], "set_action_mutex20");
+        strcpy(mutex_name[21], "set_action_mutex21");
+        strcpy(mutex_name[22], "set_action_mutex22");
+        strcpy(mutex_name[23], "set_action_mutex23");
+        strcpy(mutex_name[24], "set_action_mutex24");
+        strcpy(mutex_name[25], "set_action_mutex25");
+        strcpy(mutex_name[26], "set_action_mutex26");
+        strcpy(mutex_name[27], "set_action_mutex27");
+        strcpy(mutex_name[28], "set_action_mutex28");
+        strcpy(mutex_name[29], "set_action_mutex29");
+        strcpy(mutex_name[30], "set_action_mutex30");
+        strcpy(mutex_name[31], "set_action_mutex31");
 
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < 32; i++) {
                 sem_t *mutex = sem_open(mutex_name[i], O_CREAT | O_EXCL, 0644, 1);
                 if (mutex == SEM_FAILED) {
                         sem_unlink(mutex_name[i]);
@@ -315,14 +331,14 @@ init_set_action_mutex(void) {
                         }
                 }
                 sem_wait(mutex);
-                printf("%s create success\n", mutex_name[i]);
+                printf("%s create success\t- addr %p\n", mutex_name[i], mutex);
                 sem_post(mutex);
         }
 }
 
 static inline void
 init_pkt_mutex(void) {
-        char mutex_name[16][20];
+        char mutex_name[32][20];
         strcpy(mutex_name[0], "pkt_mutex0");
         strcpy(mutex_name[1], "pkt_mutex1");
         strcpy(mutex_name[2], "pkt_mutex2");
@@ -339,8 +355,24 @@ init_pkt_mutex(void) {
         strcpy(mutex_name[13], "pkt_mutex13");
         strcpy(mutex_name[14], "pkt_mutex14");
         strcpy(mutex_name[15], "pkt_mutex15");
+        strcpy(mutex_name[16], "pkt_mutex16");
+        strcpy(mutex_name[17], "pkt_mutex17");
+        strcpy(mutex_name[18], "pkt_mutex18");
+        strcpy(mutex_name[19], "pkt_mutex19");
+        strcpy(mutex_name[20], "pkt_mutex20");
+        strcpy(mutex_name[21], "pkt_mutex21");
+        strcpy(mutex_name[22], "pkt_mutex22");
+        strcpy(mutex_name[23], "pkt_mutex23");
+        strcpy(mutex_name[24], "pkt_mutex24");
+        strcpy(mutex_name[25], "pkt_mutex25");
+        strcpy(mutex_name[26], "pkt_mutex26");
+        strcpy(mutex_name[27], "pkt_mutex27");
+        strcpy(mutex_name[28], "pkt_mutex28");
+        strcpy(mutex_name[29], "pkt_mutex29");
+        strcpy(mutex_name[30], "pkt_mutex30");
+        strcpy(mutex_name[31], "pkt_mutex31");
 
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < 32; i++) {
                 sem_t *mutex = sem_open(mutex_name[i], O_CREAT | O_EXCL, 0644, 1);
                 if (mutex == SEM_FAILED) {
                         sem_unlink(mutex_name[i]);
@@ -351,7 +383,7 @@ init_pkt_mutex(void) {
                         }
                 }
                 sem_wait(mutex);
-                printf("%s create success\n", mutex_name[i]);
+                printf("%s create success\t- addr %p\n", mutex_name[i], mutex);
                 sem_post(mutex);
         }
 }
@@ -377,7 +409,7 @@ init_mbuf_pools(void) {
                                           sizeof(struct rte_pktmbuf_pool_private), rte_pktmbuf_pool_init, NULL,
                                           rte_pktmbuf_init, NULL, rte_socket_id(), NO_FLAGS);
 
-        const unsigned int CLONE_MBUF_SIZE = 3000000;
+        const unsigned int CLONE_MBUF_SIZE = 300000;
         printf("Creating clone mbuf pool '%s' [%u mbufs] ...\n", PKTMBUF_CLONE_POOL_NAME, CLONE_MBUF_SIZE);
         pktmbuf_clone_pool = rte_pktmbuf_pool_create(PKTMBUF_CLONE_POOL_NAME, CLONE_MBUF_SIZE, MBUF_CACHE_SIZE, 0,
                                                      RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());

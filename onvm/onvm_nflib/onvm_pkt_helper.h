@@ -232,4 +232,7 @@ onvm_pkt_generate_udp(struct rte_mempool* pktmbuf_pool, struct rte_udp_hdr* udp_
 struct rte_mbuf*
 onvm_pkt_generate_udp_sample(struct rte_mempool* pktmbuf_pool);
 
+struct rte_mbuf*
+onvm_pkt_pktmbuf_copy(struct rte_mbuf* md, struct rte_mempool* mp);
+
 #endif  // _ONVM_PKT_HELPER_H_"
