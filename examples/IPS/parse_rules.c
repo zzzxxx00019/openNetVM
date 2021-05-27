@@ -87,14 +87,19 @@ convPort(string bus, vector<uint16_t> &minPort, vector<uint16_t> &maxPort) {
         size_t colon = bus.find(':');
         if (colon != string::npos) {
                 uint16_t start = 1, end = 65535;
-                if (colon != 0)
+                if (colon != 0) {
+                        // cout << bus.substr(0, colon) << endl;
                         start = stoi(bus.substr(0, colon));
-                if (colon != bus.size() - 1)
+                }
+                if (colon != bus.size() - 1) {
+                        // cout << bus.substr(colon + 1) << endl;
                         end = stoi(bus.substr(colon + 1));
+                }
                 minPort.push_back(rte_cpu_to_be_16(start));
                 maxPort.push_back(rte_cpu_to_be_16(end));
                 return;
         }
+        // cout << bus << endl;
         minPort.push_back(rte_cpu_to_be_16(stoi(bus)));
         maxPort.push_back(rte_cpu_to_be_16(stoi(bus)));
 }
@@ -160,6 +165,91 @@ RuleTuple::RuleTuple(vector<string> &rule) : srcAddr(rule[2]), srcBus(rule[3]), 
         parseAddr(rule[5], dstIp, dstMask);
         parsePort(rule[6], dstMinPort, dstMaxPort);
 }
+/*
+static void
+ReplaceAll(string &str, const string& from, const string& to) {
+    size_t start_pos = 0;
+    while((start_pos = str.find(from, start_pos)) != string::npos) {
+        str.replace(start_pos, from.length(), to);
+        start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
+    }
+}
+*/
+static void
+splitBinary(string &pattern, string str, const char delim = ' ') {
+        vector<string> bytecode;
+        int current, previous = 0;
+        current = str.find(delim);
+        while (current != string::npos) {
+                bytecode.push_back(str.substr(previous, current - previous));
+                previous = current + 1;
+                current = str.find(delim, previous);
+        }
+        bytecode.push_back(str.substr(previous, current - previous));
+        for (auto &n : bytecode) {
+                pattern += "\\x" + n;
+        }
+}
+/*
+|00 0A|
+0123456
+| = 7C cause match error
+*/
+static void
+convBinary(string &pattern, string content, unsigned &flags) {
+        // cout << content << endl;
+        for (auto ch = content.begin(); ch != content.end(); ++ch) {
+                if (*ch == '|') {
+                        size_t binaryStart = distance(content.begin(), ch);
+                        size_t binaryEnd = content.find('|', ++binaryStart);
+                        splitBinary(pattern, content.substr(binaryStart, binaryEnd - binaryStart));
+                        ch = content.begin() + binaryEnd;  // END |
+                } else if (*ch == '[') {
+                        pattern += "\\[";
+                } else if (*ch == ']') {
+                        pattern += "\\]";
+                } else if (*ch == '(') {
+                        pattern += "\\(";
+                } else if (*ch == ')') {
+                        pattern += "\\)";
+                } else if (*ch == '^') {
+                        pattern += "\\^";
+                } else if (*ch == '?') {
+                        pattern += "\\?";
+                } else if (*ch == '+') {
+                        pattern += "\\+";
+                } else if (*ch == '*') {
+                        pattern += "\\*";
+                } else if (*ch == '.') {
+                        pattern += "\\.";
+                } else if (*ch == '\\') {
+                        pattern += "\\\\";
+                } else {
+                        pattern += *ch;
+                }
+        }
+}
+
+static bool
+parseContent(string &content, string &pattern, unsigned &flags) {
+        size_t patternEnd = content.find("\"");
+        convBinary(pattern, content.substr(0, patternEnd), flags);
+
+        size_t comma = content.find(",");
+        while (comma != string::npos) {
+                size_t seg = content.find_first_of(",;", ++comma);
+                string tmp = content.substr(comma, seg - comma);
+                comma = content.find_first_of(",;", ++seg);
+                if (tmp == "nocase") {
+                        flags |= HS_FLAG_CASELESS;
+                } else if (tmp == "fast_pattern") {
+                        flags |= HS_FLAG_PREFILTER;
+                } else {
+                        return true;
+                }
+        }
+        return false;
+}
 
 /**
  * Parse rules from pattern file
@@ -179,23 +269,42 @@ parseFile(const char *filename, RulesHashMp &rules) {
                 if (line.empty() || line[0] == '#') {
                         continue;
                 }
-                // Pcre
-                size_t pcreStart = line.find("pcre:\"/");
-                if (pcreStart == string::npos) {
-                        continue;
+
+                string pattern;
+                unsigned flags;
+                size_t featureStart = line.find("pcre:\"/");
+                if (featureStart == string::npos) {
+                        // Content
+                        featureStart = line.find("content:\"");
+                        if (featureStart == string::npos) {
+                                // cerr << "ERROR: no content in rule" << endl;
+                                continue;
+                        }
+                        size_t space = line.find(";", featureStart) + 1;
+                        if (space != line.find("metadata:") - 1) {
+                                // cerr << "ERROR: multiple content" << endl;
+                                continue;
+                        }
+                        string content = line.substr(featureStart + 9, space - featureStart - 9);
+                        flags = 0;
+                        if (parseContent(content, pattern, flags)) {
+                                continue;
+                        }
+                } else {
+                        // Pcre
+                        size_t pcreEnd = line.find("\"", featureStart + 6);
+                        const string expr(line.substr(featureStart + 6, pcreEnd - featureStart - 6));
+                        size_t flagsStart = expr.find_last_of('/');
+                        if (flagsStart == string::npos) {
+                                cerr << "ERROR: no trailing '/' char" << endl;
+                                continue;
+                        }
+                        string flagsStr(expr.substr(flagsStart + 1, expr.size() - flagsStart));
+                        pattern = expr.substr(1, flagsStart - 1);
+                        flags = parseFlags(flagsStr);
+                        if (!flags)
+                                continue;
                 }
-                size_t pcreEnd = line.find("\"", pcreStart + 6);
-                const string expr(line.substr(pcreStart + 6, pcreEnd - pcreStart - 6));
-                size_t flagsStart = expr.find_last_of('/');
-                if (flagsStart == string::npos) {
-                        cerr << "ERROR: no trailing '/' char" << endl;
-                        continue;
-                }
-                string pattern(expr.substr(1, flagsStart - 1));
-                string flagsStr(expr.substr(flagsStart + 1, expr.size() - flagsStart));
-                unsigned flags = parseFlags(flagsStr);
-                if (!flags)
-                        continue;
                 // Msg
                 size_t msgStart = line.find("msg:\"");
                 size_t msgEnd = line.find("\"", msgStart + 5);
@@ -227,7 +336,7 @@ buildDatabase(RuleDB &data, unsigned int mode) {
                 flags.push_back(i.flags);
                 ids.push_back(ids.size());
         }
-
+        // hs_compile_lit_multi();
         err = hs_compile_multi(pattern.data(), flags.data(), ids.data(), pattern.size(), mode, NULL, &db, &compileErr);
 
         if (err != HS_SUCCESS) {

@@ -18,15 +18,16 @@
 #include "onvm_nflib.h"
 #include "onvm_pkt_helper.h"
 
+#define PKTMBUF_CLONE_POOL_NAME "Mproc_pktmbuf_clone_pool"
 #define NF_TAG "parallel_fwd_2"
 
-/* number of package between each print */
 static uint32_t print_delay = 10000000;
-
 static uint64_t last_cycle;
 static uint64_t cur_cycles;
+static uint8_t destination = 0;
 
-/* shared data structure containing host port info */
+struct rte_mempool *pktmbuf_pool;
+
 extern struct port_info *ports;
 
 static void
@@ -42,8 +43,12 @@ static int
 parse_app_args(int argc, char *argv[], const char *progname) {
         int c;
 
-        while ((c = getopt(argc, argv, "p:")) != -1) {
+        while ((c = getopt(argc, argv, "d:p")) != -1) {
                 switch (c) {
+			case 'd':
+				destination = strtoul(optarg, NULL, 10);
+				RTE_LOG(INFO, APP, "Sending packets to service ID %d\n",destination);
+				break;
                         case 'p':
                                 print_delay = strtoul(optarg, NULL, 10);
                                 RTE_LOG(INFO, APP, "print_delay = %d\n", print_delay);
@@ -68,22 +73,25 @@ parse_app_args(int argc, char *argv[], const char *progname) {
 static int
 packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
                __attribute__((unused)) struct onvm_nf_local_ctx *nf_local_ctx) {
-       	
-       	(void) meta;	
-        
+        (void) meta;
+
 	static uint64_t counter = 0;
 	static uint64_t start, end, cost, latency;
 	start = rte_get_timer_cycles();
 
-	rte_delay_us_block(10);
-        onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, 5);
+	while (onvm_pkt_check_meta_bit(meta->flags, PKT_META_PAYLOAD_READ));
+	meta->flags = onvm_pkt_clear_meta_bit(meta->flags, PKT_META_PAYLOAD_WRITE);
+
+	rte_delay_us_block(2);
+	onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, destination);
 
 	end = rte_get_timer_cycles();
 	cost += (end - start);
-	if ((++counter)%1000000 == 0) {
-		latency = (cost * 1000) / rte_get_timer_hz();
+	if ((++counter) == 10000000) {
+		latency = (cost * 100) / rte_get_timer_hz();
 		printf("cost %ld cycles - latency = %ld nanosecond\n", cost, latency);
 		cost = 0;
+		counter = 0;
 	}
 
         return 0;
@@ -123,8 +131,15 @@ main(int argc, char *argv[]) {
         cur_cycles = rte_get_tsc_cycles();
         last_cycle = rte_get_tsc_cycles();
 
+        pktmbuf_pool = rte_mempool_lookup(PKTMBUF_CLONE_POOL_NAME);	
+	if (pktmbuf_pool == NULL) {
+                onvm_nflib_stop(nf_local_ctx);
+                rte_exit(EXIT_FAILURE, "Cannot find mbuf pool!\n");
+        }
+
 	struct onvm_nf *parent_nf = nf_local_ctx->nf;
-	parent_nf->handle_rate = 10000000;
+	parent_nf->handle_rate = 350000;
+	onvm_flow_dir_nf_init();
 
         onvm_nflib_run(nf_local_ctx);
 

@@ -24,6 +24,7 @@
 static uint32_t print_delay = 10000000;
 static uint64_t last_cycle;
 static uint64_t cur_cycles;
+static uint8_t destination = 0;
 
 struct rte_mempool *pktmbuf_pool;
 
@@ -42,8 +43,12 @@ static int
 parse_app_args(int argc, char *argv[], const char *progname) {
         int c;
 
-        while ((c = getopt(argc, argv, "p:")) != -1) {
+        while ((c = getopt(argc, argv, "d:p:")) != -1) {
                 switch (c) {
+			case 'd':
+				destination = strtoul(optarg, NULL, 10);
+				RTE_LOG(INFO, APP, "Sending packets to service ID %d\n",destination);
+				break;
                         case 'p':
                                 print_delay = strtoul(optarg, NULL, 10);
                                 RTE_LOG(INFO, APP, "print_delay = %d\n", print_delay);
@@ -74,15 +79,31 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
 	static uint64_t start, end, cost, latency;
 	start = rte_get_timer_cycles();
 
-	rte_delay_us_block(10);
-	onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, 3);
+	struct rte_mbuf *clone_pkt = NULL;
+	if (onvm_pkt_check_meta_bit(meta->flags, PKT_META_PAYLOAD_WRITE)) {
+		clone_pkt = onvm_pkt_pktmbuf_copy(pkt, pktmbuf_pool);
+		meta->flags = onvm_pkt_clear_meta_bit(meta->flags, PKT_META_PAYLOAD_READ);
+		if (clone_pkt == NULL) {
+			printf("can not clone pkt\n");
+			return 0;
+		}
+	} else {
+		meta->flags = onvm_pkt_clear_meta_bit(meta->flags, PKT_META_PAYLOAD_READ);
+	}
+
+	rte_delay_us_block(1);
+	onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, destination);
+
+	if (clone_pkt != NULL)
+		rte_pktmbuf_free(clone_pkt);
 
 	end = rte_get_timer_cycles();
 	cost += (end - start);
-	if ((++counter)%1000000 == 0) {
-		latency = (cost * 1000) / rte_get_timer_hz();
+	if ((++counter) == 10000000) {
+		latency = (cost * 100) / rte_get_timer_hz();
 		printf("cost %ld cycles - latency = %ld nanosecond\n", cost, latency);
 		cost = 0;
+		counter = 0;
 	}
 
         return 0;
@@ -129,7 +150,8 @@ main(int argc, char *argv[]) {
         }
 
 	struct onvm_nf *parent_nf = nf_local_ctx->nf;
-	parent_nf->handle_rate = 700000;
+	parent_nf->handle_rate = 750000;
+	onvm_flow_dir_nf_init();
 
         onvm_nflib_run(nf_local_ctx);
 

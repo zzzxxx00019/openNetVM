@@ -57,7 +57,7 @@
 /****************************Internal Declarations****************************/
 
 #define MAX_SHUTDOWN_ITERS 10
-#define NF_SCALING 0
+#define NF_SCALING 1
 
 // True as long as the main thread loop should keep running
 static uint8_t main_keep_running = 1;
@@ -179,7 +179,7 @@ master_thread_main(void) {
 
         RTE_LOG(INFO, APP, "Core %d: Master thread done\n", rte_lcore_id());
 
-        char mutex_name[16][20];
+        char mutex_name[32][20];
         strcpy(mutex_name[0], "pkt_mutex0");
         strcpy(mutex_name[1], "pkt_mutex1");
         strcpy(mutex_name[2], "pkt_mutex2");
@@ -196,8 +196,24 @@ master_thread_main(void) {
         strcpy(mutex_name[13], "pkt_mutex13");
         strcpy(mutex_name[14], "pkt_mutex14");
         strcpy(mutex_name[15], "pkt_mutex15");
+        strcpy(mutex_name[16], "pkt_mutex16");
+        strcpy(mutex_name[17], "pkt_mutex17");
+        strcpy(mutex_name[18], "pkt_mutex18");
+        strcpy(mutex_name[19], "pkt_mutex19");
+        strcpy(mutex_name[20], "pkt_mutex20");
+        strcpy(mutex_name[21], "pkt_mutex21");
+        strcpy(mutex_name[22], "pkt_mutex22");
+        strcpy(mutex_name[23], "pkt_mutex23");
+        strcpy(mutex_name[24], "pkt_mutex24");
+        strcpy(mutex_name[25], "pkt_mutex25");
+        strcpy(mutex_name[26], "pkt_mutex26");
+        strcpy(mutex_name[27], "pkt_mutex27");
+        strcpy(mutex_name[28], "pkt_mutex28");
+        strcpy(mutex_name[29], "pkt_mutex29");
+        strcpy(mutex_name[30], "pkt_mutex30");
+        strcpy(mutex_name[31], "pkt_mutex31");
 
-        for (i = 0; i < 16; i++) {
+        for (i = 0; i < 32; i++) {
                 sem_t *mutex = sem_open(mutex_name[i], 0);
                 sem_close(mutex);
                 if (sem_unlink(mutex_name[i])) {
@@ -221,8 +237,24 @@ master_thread_main(void) {
         strcpy(mutex_name[13], "set_action_mutex13");
         strcpy(mutex_name[14], "set_action_mutex14");
         strcpy(mutex_name[15], "set_action_mutex15");
+        strcpy(mutex_name[16], "set_action_mutex16");
+        strcpy(mutex_name[17], "set_action_mutex17");
+        strcpy(mutex_name[18], "set_action_mutex18");
+        strcpy(mutex_name[19], "set_action_mutex19");
+        strcpy(mutex_name[20], "set_action_mutex20");
+        strcpy(mutex_name[21], "set_action_mutex21");
+        strcpy(mutex_name[22], "set_action_mutex22");
+        strcpy(mutex_name[23], "set_action_mutex23");
+        strcpy(mutex_name[24], "set_action_mutex24");
+        strcpy(mutex_name[25], "set_action_mutex25");
+        strcpy(mutex_name[26], "set_action_mutex26");
+        strcpy(mutex_name[27], "set_action_mutex27");
+        strcpy(mutex_name[28], "set_action_mutex28");
+        strcpy(mutex_name[29], "set_action_mutex29");
+        strcpy(mutex_name[30], "set_action_mutex30");
+        strcpy(mutex_name[31], "set_action_mutex31");
 
-        for (i = 0; i < 16; i++) {
+        for (i = 0; i < 32; i++) {
                 sem_t *mutex = sem_open(mutex_name[i], 0);
                 sem_close(mutex);
                 if (sem_unlink(mutex_name[i])) {

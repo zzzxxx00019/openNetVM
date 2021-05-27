@@ -759,3 +759,16 @@ onvm_pkt_generate_udp(struct rte_mempool* pktmbuf_pool, struct rte_udp_hdr* udp_
 
         return pkt;
 }
+
+struct rte_mbuf*
+onvm_pkt_pktmbuf_copy(struct rte_mbuf* md, struct rte_mempool* mp) {
+        struct rte_mbuf* mi = rte_pktmbuf_alloc(mp);
+        if (mi == NULL) {
+                return NULL;
+        }
+        rte_memcpy(rte_pktmbuf_mtod(mi, char*), rte_pktmbuf_mtod(md, char*), md->data_len);
+        mi->pkt_len = md->pkt_len;
+        mi->data_len = md->data_len;
+
+        return mi;
+}

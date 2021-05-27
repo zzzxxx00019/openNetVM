@@ -4,6 +4,7 @@
 #define IPS_COMMON_H_
 
 #include <arpa/inet.h>
+#include <pthread.h>
 #include <unistd.h>
 #include <algorithm>
 #include <chrono>

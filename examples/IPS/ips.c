@@ -1,6 +1,5 @@
 /* Copyright @ Github.com/Rsysz */
 
-#include <pthread.h>
 #include "cmd_line.h"
 #include "flow_parser.h"
 #include "ips_common.h"
@@ -50,15 +49,32 @@ parse_app_args(int argc, char *argv[], const char *progname) {
 static int
 packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta, struct onvm_nf_local_ctx *nf_local_ctx) {
         Flow *parser = (Flow *)nf_local_ctx->nf->data;
+
+        static uint64_t counter = 0;
+        static uint64_t start, end, cost, latency;
+        start = rte_get_timer_cycles();
+
+        // struct rte_mbuf *copy_pkt = onvm_pkt_pktmbuf_copy(pkt, pktmbuf_pool);
+        // parser->scanFlow(copy_pkt);
         parser->scanFlow(pkt);
+        // rte_pktmbuf_free(copy_pkt);
+
+        end = rte_get_timer_cycles();
+        cost += (end - start);
+        if ((++counter) == 10000000) {
+                latency = (cost * 100) / rte_get_timer_hz();
+                printf("cost %ld cycles - latency = %ld nanosecond\n", cost, latency);
+                cost = 0;
+                counter = 0;
+        }
+
         // Add backpressure
 #ifdef _BACK_PRESSURE
         if (parser->drop()) {
                 struct onvm_flow_entry *flow_entry = NULL;
                 int ret = onvm_flow_dir_get_pkt(pkt, &flow_entry);
                 if (ret >= 0) {
-                        printf("Error happend, flow table can not hit\n");
-                        onvm_pkt_set_action(pkt, ONVM_NF_ACTION_DROP, 0);
+                        onvm_pkt_set_action(pkt, ONVM_NF_ACTION_NEXT, 0);
                 } else {
                         ret = onvm_flow_dir_add_pkt(pkt, &flow_entry);
                         if (ret < 0) {
@@ -68,8 +84,6 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta, struct onvm_nf_
                         memset(flow_entry, 0, sizeof(struct onvm_flow_entry));
                         flow_entry->sc = onvm_sc_create();
                         onvm_sc_set_entry(flow_entry->sc, 0, ONVM_NF_ACTION_DROP, 0);
-                        // onvm_sc_append_entry(flow_entry->sc, ONVM_NF_ACTION_TONF, 3);
-                        // onvm_sc_append_entry(flow_entry->sc, ONVM_NF_ACTION_TONF, 4);
                         onvm_pkt_set_action(pkt, ONVM_NF_ACTION_DROP, 0);
                 }
                 return 0;
@@ -149,16 +163,17 @@ main(int argc, char **argv) {
         /* Open log file */
         file = fopen(logFile.c_str(), "w");
 
+#ifdef _CMD_LINE
         /* Setup cmd interface */
-        /*
-        pthread_t cmd_line;  // pthread variable
+        pthread_t cmd_line;
         if (pthread_create(&cmd_line, NULL, parse_cmd_line, NULL)) {
                 perror("pthread_create error");
         }
         pthread_detach(cmd_line);
-        */
+#endif
         struct onvm_nf *parent_nf = nf_local_ctx->nf;
         parent_nf->handle_rate = 1000000;
+
 #ifdef _BACK_PRESSURE
         /* Map the sdn_ft table */
         onvm_flow_dir_nf_init();

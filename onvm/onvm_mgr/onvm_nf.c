@@ -51,7 +51,7 @@
 #include "onvm_mgr.h"
 #include "onvm_stats.h"
 
-#define Max_Child 3
+#define Max_Child 7
 
 /* ID 0 is reserved */
 uint16_t next_instance_id = 1;

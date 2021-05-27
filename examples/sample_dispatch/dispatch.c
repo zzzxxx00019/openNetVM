@@ -84,17 +84,17 @@ packet_handler(struct rte_mbuf *pkt, struct onvm_pkt_meta *meta,
         }
 	*/
         // When use parallel action, must initial dst to 0 before setting
-        //uint8_t dst = 0;
-
-        //meta->payload_read = true;
-        //dst |= (1 << 3);
-	//meta->payload_write = true;
-        //dst |= (1 << 2);
         
+	uint8_t dst = 0;
+        meta->flags = onvm_pkt_set_meta_bit(meta->flags, PKT_META_PAYLOAD_READ);
+	dst |= (1 << 2);
+	meta->flags = onvm_pkt_set_meta_bit(meta->flags, PKT_META_PAYLOAD_WRITE);
+        dst |= (1 << 3);
+	
         //dst |= (1 << 5);
-        
-        //onvm_pkt_set_action(pkt, ONVM_NF_ACTION_PARA, dst);
-	onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, 2);
+        onvm_pkt_set_action(pkt, ONVM_NF_ACTION_PARA, dst);
+	
+	//onvm_pkt_set_action(pkt, ONVM_NF_ACTION_TONF, 2);
 
         return 0;
 }
@@ -131,7 +131,7 @@ main(int argc, char *argv[]) {
         }
 
 	struct onvm_nf *parent_nf = nf_local_ctx->nf;
-	parent_nf->handle_rate = 800000;
+	parent_nf->handle_rate = 10000000;
 
         cur_cycles = rte_get_tsc_cycles();
         last_cycle = rte_get_tsc_cycles();

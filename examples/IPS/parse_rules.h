@@ -51,12 +51,15 @@ const unordered_map<string, string> VAR_MAP = {
     /* SERVERS */
     {"$HTTP_SERVERS", "192.168.2.200"},
     {"$SQL_SERVERS", "192.168.2.200"},
+    {"$SIP_SERVERS", "192.168.2.200"},
     {"$SMTP_SERVERS", "192.168.2.200"},
     {"$DNS_SERVERS", "192.168.2.200"},
     {"$TELNET_SERVERS", "192.168.2.200"},
     {"$SNMP_SERVERS", "192.168.2.200"},
     /* PORTS */
     {"$HTTP_PORTS", "80"},
+    {"$SSH_PORTS", "22"},
+    {"$SIP_PORTS", "0"},
     {"$FILE_DATA_PORTS", "0"},
     {"$SHELLCODE_PORTS", "0"},
     {"$ORACLE_PORTS", "0"},

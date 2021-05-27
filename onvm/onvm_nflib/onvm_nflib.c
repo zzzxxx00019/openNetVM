@@ -1001,7 +1001,8 @@ onvm_nflib_dequeue_packets(void **pkts, struct onvm_nf_local_ctx *nf_local_ctx, 
         nf = nf_local_ctx->nf;
 
         /* Dequeue all packets in ring up to max possible. */
-        nb_pkts = rte_ring_mc_dequeue_burst(nf->rx_q, pkts, PACKET_READ_SIZE, NULL);
+        //nb_pkts = rte_ring_mc_dequeue_burst(nf->rx_q, pkts, PACKET_READ_SIZE, NULL);
+	nb_pkts = rte_ring_dequeue_burst(nf->rx_q, pkts, PACKET_READ_SIZE, NULL);
 
         if (unlikely(nb_pkts == 0)) {
                 return 0;
